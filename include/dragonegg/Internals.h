@@ -33,6 +33,12 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/FormattedStream.h"
 
+#if __has_attribute(sentinel) || LLVM_GNUC_PREREQ(3, 0, 0)
+#define LLVM_END_WITH_NULL __attribute__((sentinel))
+#else
+#define LLVM_END_WITH_NULL
+#endif
+
 struct basic_block_def;
 union gimple_statement_d;
 union tree_node;
@@ -57,7 +63,7 @@ template <typename> class TrackingVH;
 }
 class DebugInfo;
 
-typedef llvm::IRBuilder<true, llvm::TargetFolder> LLVMBuilder;
+typedef llvm::IRBuilder<llvm::TargetFolder> LLVMBuilder;
 
 // Global state.
 

@@ -546,7 +546,7 @@ static void CreateTargetMachine(const std::string &TargetTriple) {
 /// output_ident - Insert a .ident directive that identifies the plugin.
 static void output_ident(const char *ident_str) {
   const char *ident_asm_op = "\t.ident\t";
-#if (GCC_MINOR < 8)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 8)
 #ifdef IDENT_ASM_OP
   ident_asm_op = IDENT_ASM_OP;
 #endif

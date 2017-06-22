@@ -149,7 +149,7 @@ public:
   llvm::DIDescriptor findRegion(tree_node *n);
 
   /// getOrCreateNameSpace - Get name space descriptor for the tree node.
-  llvm::DINameSpace getOrCreateNameSpace(tree_node *Node,
+  llvm::DINamespace getOrCreateNameSpace(tree_node *Node,
                                          llvm::DIDescriptor Context);
 
   /// getFunctionName - Get function name for the given FnDecl. If the
