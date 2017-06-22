@@ -31,7 +31,8 @@
 // LLVM headers
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringExtras.h"
-#include "llvm/Bitcode/ReaderWriter.h"
+#include "llvm/Bitcode/BitcodeReader.h"
+#include "llvm/Bitcode/BitcodeWriter.h"
 #include "llvm/CodeGen/RegAllocRegistry.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/IRPrintingPasses.h"
@@ -39,12 +40,12 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/MC/SubtargetFeature.h"
-#include "llvm/PassManager.h"
+#include "llvm/IR/PassManager.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/TargetRegistry.h"
-#include "llvm/Target/TargetLibraryInfo.h"
+#include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Target/TargetSubtargetInfo.h"
 #include "llvm/Transforms/IPO.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
@@ -85,7 +86,11 @@ extern "C" {
 #endif
 #include "target.h" // For targetm.
 #include "toplev.h"
+#if (GCC_MAJOR == 4)
 #include "tree-flow.h"
+#else
+#include "tree-cfg.h"
+#endif
 #include "tree-pass.h"
 #include "version.h"
 
@@ -99,7 +104,7 @@ tree default_mangle_decl_assembler_name(tree, tree);
 #include "dragonegg/Trees.h"
 
 #if (GCC_MAJOR != 4)
-#error Unsupported GCC major version
+#warning Experimental GCC major version
 #endif
 
 using namespace llvm;

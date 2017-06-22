@@ -59,7 +59,7 @@ extern "C" {
 
 using namespace llvm;
 
-static LLVMContext &Context = getGlobalContext();
+static LLVMContext Context;
 
 /// getTBAARoot - Return the root of the TBAA tree for this compilation unit.
 static MDNode *getTBAARoot() {

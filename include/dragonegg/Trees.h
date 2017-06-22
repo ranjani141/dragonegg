@@ -142,7 +142,7 @@ unsigned getFieldAlignment(const_tree field);
 bool isBitfield(const_tree field_decl);
 
 // Compatibility hacks for older versions of GCC.
-#if (GCC_MINOR < 8)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 8)
 // Supported allocation types:
 struct va_gc {
 }; // Allocation uses ggc_alloc.
