@@ -40,7 +40,7 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/MC/SubtargetFeature.h"
-#include "llvm/IR/PassManager.h"
+#include "llvm/IR/LegacyPassManager.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/SourceMgr.h"
@@ -49,6 +49,7 @@
 #include "llvm/Target/TargetSubtargetInfo.h"
 #include "llvm/Transforms/IPO.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
+#include "llvm/Target/TargetOptions.h"
 #include "llvm-c/Target.h"
 
 #ifdef ENABLE_LLVM_PLUGINS
@@ -114,7 +115,7 @@ int flag_no_simplify_libcalls;
 
 // Whether -fno-builtin was specified.
 // In GCC < 4.6, this variable is only defined in C family front ends.
-#if (GCC_MINOR < 6)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 6)
 extern int flag_no_builtin __attribute__((weak));
 #endif
 
@@ -157,8 +158,8 @@ std::vector<Constant *> AttributeAnnotateGlobals;
 /// as each is compiled.  In cases where we are not doing IPO, it includes the
 /// code generator.
 static FunctionPassManager *PerFunctionPasses = 0;
-static PassManager *PerModulePasses = 0;
-static PassManager *CodeGenPasses = 0;
+static legacy::PassManager *PerModulePasses = 0;
+static legacy::PassManager *CodeGenPasses = 0;
 
 static void createPerFunctionOptimizationPasses();
 static void createPerModuleOptimizationPasses();
@@ -473,7 +474,7 @@ static void CreateTargetMachine(const std::string &TargetTriple) {
 
   // The target can set LLVM_SET_RELOC_MODEL to configure the relocation model
   // used by the LLVM backend.
-  Reloc::Model RelocModel = Reloc::Default;
+  Reloc::Model RelocModel = Reloc::Static;
 #ifdef LLVM_SET_RELOC_MODEL
   LLVM_SET_RELOC_MODEL(RelocModel);
 #endif
@@ -487,13 +488,13 @@ static void CreateTargetMachine(const std::string &TargetTriple) {
 
   TargetOptions Options;
 
-  // Set frame pointer elimination mode.
+  // FIXME: Set frame pointer elimination mode.
   if (flag_omit_frame_pointer) {
     // Eliminate frame pointers everywhere.
-    Options.NoFramePointerElim = false;
+    //Options.NoFramePointerElim = false;
   } else {
     // Keep frame pointers everywhere.
-    Options.NoFramePointerElim = true;
+    //Options.NoFramePointerElim = true;
   }
   // If a target has an option to eliminate frame pointers in leaf functions
   // only then it should set
@@ -566,7 +567,7 @@ static void CreateModule(const std::string &TargetTriple) {
   StringRef ModuleID = main_input_filename ? main_input_filename : "";
   TheModule = new Module(ModuleID, getGlobalContext());
 
-#if (GCC_MINOR < 8)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 8)
 #ifdef IDENT_ASM_OP
   if (!flag_no_ident) {
     std::string IdentString;

@@ -42,6 +42,53 @@ class BasicBlock;
 class CallInst;
 class Function;
 class Module;
+
+/// DIDescriptor - A thin wraper around MDNode to access encoded debug info.
+/// This should not be stored in a container, because underly MDNode may
+/// change in certain situations.
+class DIDescriptor {
+protected:
+  MDNode *DbgNode;
+
+  /// DIDescriptor constructor.  If the specified node is non-null, check
+  /// to make sure that the tag in the descriptor matches 'RequiredTag'.  If
+  /// not, the debug info is corrupt and we ignore it.
+  DIDescriptor(MDNode *N, unsigned RequiredTag);
+
+  StringRef getStringField(unsigned Elt) const;
+  unsigned getUnsignedField(unsigned Elt) const {
+    return (unsigned)getUInt64Field(Elt);
+  }
+  uint64_t getUInt64Field(unsigned Elt) const;
+  DIDescriptor getDescriptorField(unsigned Elt) const;
+
+  template <typename DescTy>
+  DescTy getFieldAs(unsigned Elt) const {
+    return DescTy(getDescriptorField(Elt).getNode());
+  }
+
+  GlobalVariable *getGlobalVariableField(unsigned Elt) const;
+
+public:
+  explicit DIDescriptor() : DbgNode(0) {}
+  explicit DIDescriptor(MDNode *N) : DbgNode(N) {}
+
+  bool isNull() const { return DbgNode == 0; }
+
+  MDNode *getNode() const { return DbgNode; }
+};
+
+/// DIArray - This descriptor holds an array of descriptors.
+class DIArray : public DIDescriptor {
+public:
+  explicit DIArray(MDNode *N = 0)
+    : DIDescriptor(N) {}
+
+  unsigned getNumElements() const;
+  DIDescriptor getElement(unsigned Idx) const {
+    return getDescriptorField(Idx);
+  }
+};
 }
 
 /// DebugInfo - This class gathers all debug information during compilation and
@@ -180,9 +227,8 @@ private:
       llvm::DIDescriptor Context, llvm::StringRef Name,
       llvm::StringRef DisplayName, llvm::StringRef LinkageName, llvm::DIFile F,
       unsigned LineNo, llvm::DIType Ty, bool isLocalToUnit, bool isDefinition,
-      unsigned VK = 0, unsigned VIndex = 0,
-      llvm::DIType ContainingType = llvm::DIType(), unsigned Flags = 0,
-      bool isOptimized = false, llvm::Function *Fn = 0);
+      llvm::DIType ContainingType, unsigned VK = 0, unsigned VIndex = 0,
+      unsigned Flags = 0, bool isOptimized = false, llvm::Function *Fn = 0);
 
   /// CreateSubprogramDefinition - Create new subprogram descriptor for the
   /// given declaration.

@@ -291,8 +291,8 @@ void DebugInfo::EmitFunctionStart(tree FnDecl, Function *Fn) {
 
   DISubprogram SP = CreateSubprogram(
       SPContext, FnName, FnName, LinkageName, getOrCreateFile(Loc.file), lineno,
-      FNType, Fn->hasInternalLinkage(), true /*definition*/, Virtuality, VIndex,
-      ContainingType, DECL_ARTIFICIAL(FnDecl), optimize, Fn);
+      FNType, Fn->hasInternalLinkage(), true /*definition*/, ContainingType,
+      Virtuality, VIndex, DECL_ARTIFICIAL(FnDecl), optimize, Fn);
 
   SPCache[FnDecl] = WeakVH(SP);
 
@@ -814,7 +814,7 @@ DIType DebugInfo::createStructType(tree type) {
       DISubprogram SP = CreateSubprogram(
           findRegion(DECL_CONTEXT(Member)), MemberName, MemberName, LinkageName,
           getOrCreateFile(MemLoc.file), MemLoc.line, SPTy, false, false,
-          Virtuality, VIndex, ContainingType, DECL_ARTIFICIAL(Member),
+          ContainingType, Virtuality, VIndex, DECL_ARTIFICIAL(Member),
           optimize);
       EltTys.push_back(SP);
       SPCache[Member] = WeakVH(SP);
@@ -1125,8 +1125,8 @@ DICompositeType DebugInfo::CreateCompositeType(
 DISubprogram DebugInfo::CreateSubprogram(
     DIDescriptor Context, StringRef Name, StringRef DisplayName,
     StringRef LinkageName, DIFile F, unsigned LineNo, DIType Ty,
-    bool isLocalToUnit, bool isDefinition, unsigned VK, unsigned VIndex,
-    DIType ContainingType, unsigned Flags, bool isOptimized, Function *Fn) {
+    bool isLocalToUnit, bool isDefinition, DIType ContainingType, unsigned VK,
+    unsigned VIndex, unsigned Flags, bool isOptimized, Function *Fn) {
   DICompositeType CTy = getDICompositeType(Ty);
   assert(CTy.Verify() && "Expected a composite type!");
   if (ContainingType.isValid() || VK || VIndex)
