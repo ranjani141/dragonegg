@@ -50,6 +50,7 @@
 #include "llvm/Transforms/IPO.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
 #include "llvm/Target/TargetOptions.h"
+#include "llvm/Target/TargetMachine.h"
 #include "llvm-c/Target.h"
 
 #ifdef ENABLE_LLVM_PLUGINS
@@ -320,10 +321,10 @@ static bool SizeOfGlobalMatchesDecl(GlobalValue *GV, tree decl) {
   // TODO: Change getTypeSizeInBits for aggregate types so it is no longer
   // rounded up to the alignment.
   uint64_t gcc_size = getInt64(DECL_SIZE(decl), true);
-  const DataLayout *DL = TheTarget->getSubtargetImpl()->getDataLayout();
+  const DataLayout *DL = TheTarget->createDataLayout();
   unsigned Align = 8 * DL->getABITypeAlignment(Ty);
-  return TheTarget->getSubtargetImpl()->getDataLayout()->getTypeAllocSizeInBits(
-             Ty) == ((gcc_size + Align - 1) / Align) * Align;
+  return TheTarget->createDataLayout()->getTypeAllocSizeInBits(Ty) ==
+      ((gcc_size + Align - 1) / Align) * Align;
 }
 #endif
 
@@ -517,8 +518,8 @@ static void CreateTargetMachine(const std::string &TargetTriple) {
   Options.NoNaNsFPMath = flag_finite_math_only;
   Options.NoZerosInBSS = !flag_zero_initialized_in_bss;
   Options.UnsafeFPMath =
-#if (GCC_MINOR > 5)
-      fast_math_flags_set_p(&global_options);
+#if (GCC_MAJOR > 4 || GCC_MINOR > 5)
+  fast_math_flags_set_p(&global_options);
 #else
   fast_math_flags_set_p();
 #endif
@@ -528,10 +529,12 @@ static void CreateTargetMachine(const std::string &TargetTriple) {
   // TODO: DisableTailCalls.
   // TODO: TrapFuncName.
   // TODO: -fsplit-stack
-  Options.PositionIndependentExecutable = flag_pie;
+  // FIXME: https://reviews.llvm.org/D19733
+  //Options.PositionIndependentExecutable = flag_pie;
 
 #ifdef LLVM_SET_TARGET_MACHINE_OPTIONS
-  LLVM_SET_TARGET_MACHINE_OPTIONS(Options);
+  // FIXME: https://reviews.llvm.org/D9830
+  //LLVM_SET_TARGET_MACHINE_OPTIONS(Options);
 #endif
   // Binutils does not yet support the use of file directives with an explicit
   // directory.  FIXME: Once GCC learns to detect support for this, condition
@@ -540,8 +543,7 @@ static void CreateTargetMachine(const std::string &TargetTriple) {
 
   TheTarget = TME->createTargetMachine(TargetTriple, CPU, FeatureStr, Options,
                                        RelocModel, CMModel, CodeGenOptLevel());
-  assert(TheTarget->getSubtargetImpl()->getDataLayout()->isBigEndian() ==
-         BYTES_BIG_ENDIAN);
+  assert(TheTarget->createDataLayout()->isBigEndian() == BYTES_BIG_ENDIAN);
 }
 
 /// output_ident - Insert a .ident directive that identifies the plugin.
@@ -565,7 +567,8 @@ static void output_ident(const char *ident_str) {
 static void CreateModule(const std::string &TargetTriple) {
   // Create the module itself.
   StringRef ModuleID = main_input_filename ? main_input_filename : "";
-  TheModule = new Module(ModuleID, getGlobalContext());
+  LLVMContext Context;
+  TheModule = new Module(ModuleID, Context);
 
 #if (GCC_MAJOR < 5 && GCC_MINOR < 8)
 #ifdef IDENT_ASM_OP
@@ -589,9 +592,8 @@ static void CreateModule(const std::string &TargetTriple) {
   // Install information about the target triple and data layout into the module
   // for optimizer use.
   TheModule->setTargetTriple(TargetTriple);
-  TheModule->setDataLayout(TheTarget->getSubtargetImpl()
-                               ->getDataLayout()
-                               ->getStringRepresentation());
+  // https://reviews.llvm.org/D11103
+  TheModule->setDataLayout(TheTarget->createDataLayout());
 }
 
 /// flag_default_initialize_globals - Whether global variables with no explicit
@@ -652,7 +654,7 @@ static void InitializeBackend(void) {
   // Create a module to hold the generated LLVM IR.
   CreateModule(TargetTriple);
 
-  TheFolder = new TargetFolder(TheTarget->getSubtargetImpl()->getDataLayout());
+  TheFolder = new TargetFolder(TheTarget->createDataLayout());
 
   if (debug_info_level > DINFO_LEVEL_NONE) {
     TheDebugInfo = new DebugInfo(TheModule);
