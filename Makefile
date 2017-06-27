@@ -43,7 +43,7 @@ COMMON_FLAGS+=-fvisibility=hidden
 endif
 CFLAGS+=$(COMMON_FLAGS) $(shell $(LLVM_CONFIG) --cflags)
 #CXXFLAGS+=$(COMMON_FLAGS) $(shell $(LLVM_CONFIG) --cxxflags)
-CXXFLAGS+=$(COMMON_FLAGS) -I/usr/include -std=c++11 -fPIC -fvisibility-inlines-hidden -Wall -W -Wno-unused-parameter -Wwrite-strings -Wcast-qual -Wmissing-field-initializers -pedantic -Wno-long-long -Wno-switch-default -Wnon-virtual-dtor -Wdelete-non-virtual-dtor -Wint-conversion -ffunction-sections -fdata-sections -O2 -DNDEBUG   -DLLVM_BUILD_GLOBAL_ISEL -D_GNU_SOURCE -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS -DDRAGONBALL_DEBUG
+CXXFLAGS+=$(COMMON_FLAGS) -I/usr/include -std=c++14 -fPIC -fvisibility-inlines-hidden -Wall -W -Wno-unused-parameter -Wwrite-strings -Wcast-qual -Wmissing-field-initializers -pedantic -Wno-long-long -Wno-switch-default -Wnon-virtual-dtor -Wdelete-non-virtual-dtor -Wint-conversion -ffunction-sections -fdata-sections -O2 -DNDEBUG   -DLLVM_BUILD_GLOBAL_ISEL -D_GNU_SOURCE -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS -DDRAGONBALL_DEBUG
 
 ifeq ($(shell uname),Darwin)
 LOADABLE_MODULE_OPTIONS=-bundle -undefined dynamic_lookup

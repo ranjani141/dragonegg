@@ -139,7 +139,7 @@ PassManagerBuilder PassBuilder;
 TargetMachine *TheTarget = 0;
 TargetFolder *TheFolder = 0;
 raw_ostream *OutStream = 0; // Stream to write assembly code to.
-formatted_raw_ostream FormattedOutStream;
+std::unique_ptr<formatted_raw_ostream> FormattedOutStream;
 
 static bool DebugPassArguments;
 static bool DebugPassStructure;
@@ -672,8 +672,7 @@ static void InitializeBackend(void) {
 //  PassBuilder.SLPVectorize = flag_tree_slp_vectorize;
   PassBuilder.LoopVectorize = flag_tree_vectorize;
 
-  PassBuilder.LibraryInfo =
-      new TargetLibraryInfo((Triple) TheModule->getTargetTriple());
+  PassBuilder.LibraryInfo = new TargetLibraryInfoImpl(dyn_cast<Triple>(TheModule->getTargetTriple()));
   if (flag_no_simplify_libcalls)
     PassBuilder.LibraryInfo->disableAllFunctions();
 
@@ -691,8 +690,8 @@ static void InitializeOutputStreams(bool Binary) {
   if (EC)
     report_fatal_error(EC.message());
 
-  FormattedOutStream.setStream(*OutStream,
-                               formatted_raw_ostream::PRESERVE_STREAM);
+  // https://reviews.llvm.org/rL234535
+  FormattedOutStream = std::make_unique<formatted_raw_ostream>(*OutStream);
 }
 
 static void createPerFunctionOptimizationPasses() {
@@ -735,7 +734,7 @@ static void createPerFunctionOptimizationPasses() {
     TargetMachine::CodeGenFileType CGFT = TargetMachine::CGFT_AssemblyFile;
     if (EmitObj)
       CGFT = TargetMachine::CGFT_ObjectFile;
-    if (TheTarget->addPassesToEmitFile(*PM, FormattedOutStream, CGFT,
+    if (TheTarget->addPassesToEmitFile(*PM, FormattedOutStream.get(), CGFT,
                                        DisableVerify))
       llvm_unreachable("Error interfacing to target machine!");
   }
@@ -809,7 +808,7 @@ static void createPerModuleOptimizationPasses() {
       TargetMachine::CodeGenFileType CGFT = TargetMachine::CGFT_AssemblyFile;
       if (EmitObj)
         CGFT = TargetMachine::CGFT_ObjectFile;
-      if (TheTarget->addPassesToEmitFile(*PM, FormattedOutStream, CGFT,
+      if (TheTarget->addPassesToEmitFile(*PM, FormattedOutStream.get(), CGFT,
                                          DisableVerify))
         llvm_unreachable("Error interfacing to target machine!");
     }
@@ -1994,7 +1993,7 @@ static void llvm_finish_unit(void */*gcc_data*/, void */*user_data*/) {
     Context.setInlineAsmDiagnosticHandler(OldHandler, OldHandlerData);
   }
 
-  FormattedOutStream.flush();
+  FormattedOutStream->flush();
   OutStream->flush();
   //TODO  timevar_pop(TV_LLVM_PERFILE);
 
