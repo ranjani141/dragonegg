@@ -701,8 +701,10 @@ static void createPerFunctionOptimizationPasses() {
   // Create and set up the per-function pass manager.
   // FIXME: Move the code generator to be function-at-a-time.
   PerFunctionPasses = new FunctionPassManager(TheModule);
-  PerFunctionPasses->add(new DataLayoutPass());
-  TheTarget->addAnalysisPasses(*PerFunctionPasses);
+  // FIXME: https://reviews.llvm.org/D7992
+  //PerFunctionPasses->add(new DataLayoutPass());
+  // FIXME
+  //TheTarget->addAnalysisPasses(*PerFunctionPasses);
 
 #ifndef NDEBUG
   PerFunctionPasses->add(createVerifierPass());
@@ -747,8 +749,9 @@ static void createPerModuleOptimizationPasses() {
     return;
 
   PerModulePasses = new PassManager();
-  PerModulePasses->add(new DataLayoutPass());
-  TheTarget->addAnalysisPasses(*PerModulePasses);
+  // FIXME: https://reviews.llvm.org/D7992
+  //PerModulePasses->add(new DataLayoutPass());
+  PerModulePasses->add(createTypeBasedAliasAnalysisPass());
 
   Pass *InliningPass;
   if (!LLVMIROptimizeArg)
@@ -791,8 +794,10 @@ static void createPerModuleOptimizationPasses() {
     // this for fast -O0 compiles!
     if (PerModulePasses || 1) {
       PassManager *PM = CodeGenPasses = new PassManager();
-      PM->add(new DataLayoutPass());
-      TheTarget->addAnalysisPasses(*PM);
+      // FIXME: https://reviews.llvm.org/D7992
+      //PM->add(new DataLayoutPass());
+      // FIXME
+      //TheTarget->addAnalysisPasses(*PM);
 
 // Request that addPassesToEmitFile run the Verifier after running
 // passes which modify the IR.
