@@ -49,6 +49,7 @@
 #include "llvm/Target/TargetSubtargetInfo.h"
 #include "llvm/Transforms/IPO.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
+#include "llvm/Transforms/IPO/AlwaysInliner.h"
 #include "llvm/Target/TargetOptions.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm-c/Target.h"
@@ -158,9 +159,11 @@ std::vector<Constant *> AttributeAnnotateGlobals;
 /// PerFunctionPasses - This is the list of cleanup passes run per-function
 /// as each is compiled.  In cases where we are not doing IPO, it includes the
 /// code generator.
-static FunctionPassManager *PerFunctionPasses = 0;
+static legacy::FunctionPassManager *PerFunctionPasses = 0;
 static legacy::PassManager *PerModulePasses = 0;
 static legacy::PassManager *CodeGenPasses = 0;
+
+static LLVMContext TheContext;
 
 static void createPerFunctionOptimizationPasses();
 static void createPerModuleOptimizationPasses();
@@ -700,11 +703,12 @@ static void createPerFunctionOptimizationPasses() {
 
   // Create and set up the per-function pass manager.
   // FIXME: Move the code generator to be function-at-a-time.
-  PerFunctionPasses = new FunctionPassManager(TheModule);
+  PerFunctionPasses = new legacy::FunctionPassManager(TheModule);
   // FIXME: https://reviews.llvm.org/D7992
   //PerFunctionPasses->add(new DataLayoutPass());
-  // FIXME
-  //TheTarget->addAnalysisPasses(*PerFunctionPasses);
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR >= 3 && LLVM_VERSION_MINOR <= 6
+  TheTarget->addAnalysisPasses(*PerFunctionPasses);
+#endif
 
 #ifndef NDEBUG
   PerFunctionPasses->add(createVerifierPass());
@@ -720,7 +724,7 @@ static void createPerFunctionOptimizationPasses() {
   // FIXME: This is disabled right now until bugs can be worked out.  Reenable
   // this for fast -O0 compiles!
   if (!EmitIR && 0) {
-    FunctionPassManager *PM = PerFunctionPasses;
+    legacy::FunctionPassManager *PM = PerFunctionPasses;
 
 // Request that addPassesToEmitFile run the Verifier after running
 // passes which modify the IR.
@@ -736,9 +740,11 @@ static void createPerFunctionOptimizationPasses() {
     TargetMachine::CodeGenFileType CGFT = TargetMachine::CGFT_AssemblyFile;
     if (EmitObj)
       CGFT = TargetMachine::CGFT_ObjectFile;
+    /* FIXME
     if (TheTarget->addPassesToEmitFile(*PM, FormattedOutStream.get(), CGFT,
                                        DisableVerify))
       llvm_unreachable("Error interfacing to target machine!");
+    */
   }
 
   PerFunctionPasses->doInitialization();
@@ -748,10 +754,12 @@ static void createPerModuleOptimizationPasses() {
   if (PerModulePasses)
     return;
 
-  PerModulePasses = new PassManager();
+  PerModulePasses = new legacy::PassManager();
   // FIXME: https://reviews.llvm.org/D7992
   //PerModulePasses->add(new DataLayoutPass());
-  PerModulePasses->add(createTypeBasedAliasAnalysisPass());
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR >= 3 && LLVM_VERSION_MINOR <= 6
+  TheTarget->addAnalysisPasses(*PerModulePasses);
+#endif
 
   Pass *InliningPass;
   if (!LLVMIROptimizeArg)
@@ -773,7 +781,7 @@ static void createPerModuleOptimizationPasses() {
   } else {
     // Run the always-inline pass to handle functions marked as always_inline.
     // TODO: Consider letting the GCC inliner do this.
-    InliningPass = createAlwaysInlinerPass();
+    InliningPass = createAlwaysInlinerLegacyPass();
   }
 
   PassBuilder.OptLevel = ModuleOptLevel();
@@ -793,11 +801,12 @@ static void createPerModuleOptimizationPasses() {
     // FIXME: This is disabled right now until bugs can be worked out.  Reenable
     // this for fast -O0 compiles!
     if (PerModulePasses || 1) {
-      PassManager *PM = CodeGenPasses = new PassManager();
+      legacy::PassManager *PM = CodeGenPasses = new legacy::PassManager();
       // FIXME: https://reviews.llvm.org/D7992
       //PM->add(new DataLayoutPass());
-      // FIXME
-      //TheTarget->addAnalysisPasses(*PM);
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR >= 3 && LLVM_VERSION_MINOR <= 6
+      TheTarget->addAnalysisPasses(*PM);
+#endif
 
 // Request that addPassesToEmitFile run the Verifier after running
 // passes which modify the IR.
@@ -813,9 +822,11 @@ static void createPerModuleOptimizationPasses() {
       TargetMachine::CodeGenFileType CGFT = TargetMachine::CGFT_AssemblyFile;
       if (EmitObj)
         CGFT = TargetMachine::CGFT_ObjectFile;
+      /* FIXME:
       if (TheTarget->addPassesToEmitFile(*PM, FormattedOutStream.get(), CGFT,
                                          DisableVerify))
         llvm_unreachable("Error interfacing to target machine!");
+      */
     }
   }
 }
@@ -828,7 +839,7 @@ static void CreateStructorsList(std::vector<std::pair<Constant *, int> > &Tors,
   std::vector<Constant *> StructInit;
   StructInit.resize(2);
 
-  LLVMContext &Context = getGlobalContext();
+  LLVMContext &Context = TheContext;
 
   Type *FPTy =
       FunctionType::get(Type::getVoidTy(Context), std::vector<Type *>(), false);
@@ -852,7 +863,7 @@ static void CreateStructorsList(std::vector<std::pair<Constant *, int> > &Tors,
 /// global if possible.
 Constant *ConvertMetadataStringToGV(const char *str) {
 
-  Constant *Init = ConstantDataArray::getString(getGlobalContext(), str);
+  Constant *Init = ConstantDataArray::getString(TheContext, str);
 
   // Use cached string if it exists.
   static std::map<Constant *, GlobalVariable *> StringCSTCache;
@@ -873,7 +884,7 @@ Constant *ConvertMetadataStringToGV(const char *str) {
 /// AddAnnotateAttrsToGlobal - Adds decls that have a annotate attribute to a
 /// vector to be emitted later.
 void AddAnnotateAttrsToGlobal(GlobalValue *GV, tree decl) {
-  LLVMContext &Context = getGlobalContext();
+  LLVMContext &Context = TheContext;
 
   // Handle annotate attribute on global.
   tree annotateAttr = lookup_attribute("annotate", DECL_ATTRIBUTES(decl));
@@ -1295,7 +1306,7 @@ Value *make_decl_llvm(tree decl) {
   if (errorcount || sorrycount)
     return NULL; // Do not process broken code.
 
-  LLVMContext &Context = getGlobalContext();
+  LLVMContext &Context = TheContext;
 
   // Global register variable with asm name, e.g.:
   // register unsigned long esp __asm__("ebp");
@@ -1903,7 +1914,7 @@ static void llvm_finish_unit(void */*gcc_data*/, void */*user_data*/) {
     TheDebugInfo = 0;
   }
 
-  LLVMContext &Context = getGlobalContext();
+  LLVMContext &Context = TheContext;
 
   createPerFunctionOptimizationPasses();
 
