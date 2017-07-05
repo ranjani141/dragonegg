@@ -80,6 +80,9 @@ extern "C" {
 #include "diagnostic.h"
 #include "flags.h"
 #include "gcc-plugin.h"
+#if GCC_MAJOR > 5
+#include "cgraph.h"
+#endif
 #include "intl.h"
 #include "langhooks.h"
 #include "output.h"
@@ -169,7 +172,7 @@ static void createPerFunctionOptimizationPasses();
 static void createPerModuleOptimizationPasses();
 
 // Compatibility hacks for older versions of GCC.
-#if (GCC_MINOR < 8)
+#if (GCC_MAJOR < 6 && GCC_MINOR < 8)
 
 static struct cgraph_node *cgraph_symbol(struct cgraph_node *N) { return N; }
 static struct varpool_node *varpool_symbol(struct varpool_node *N) { return N; }
@@ -187,6 +190,16 @@ static struct varpool_node *varpool_symbol(struct varpool_node *N) { return N; }
 
 #define FOR_EACH_VARIABLE(node) \
   for ((node) = varpool_nodes; (node); (node) = (node)->next)
+
+#elif GCC_MAJOR > 5
+
+#define ipa_ref_list_referring_iterate(L,I,P) \
+  (L)->referring.iterate ((I), &(P))
+
+static inline struct varpool_node *ipa_ref_referring_varpool_node(struct ipa_ref *ref) { return reinterpret_cast<varpool_node *>(ref->referring); }
+
+static symtab_node *cgraph_symbol(cgraph_node *N) { return symtab_node::get(N->orig_decl); }
+static symtab_node *varpool_symbol(varpool_node *N) { return symtab_node::get(N->get_constructor()); }
 
 #else
 
@@ -968,9 +981,17 @@ static void emit_alias(tree decl, tree target) {
     target = TREE_CHAIN(target);
 
   if (isa<IDENTIFIER_NODE>(target)) {
+#if GCC_MAJOR > 5
+    if (struct cgraph_node *fnode = cgraph_node::get_for_asmname(target))
+#else
     if (struct cgraph_node *fnode = cgraph_node_for_asm(target))
+#endif
       target = cgraph_symbol(fnode)->decl;
+#if GCC_MAJOR > 5
+    else if (struct varpool_node *vnode = varpool_node::get_for_asmname(target))
+#else
     else if (struct varpool_node *vnode = varpool_node_for_asm(target))
+#endif
       target = varpool_symbol(vnode)->decl;
   }
 
@@ -1034,7 +1055,7 @@ static void emit_alias(tree decl, tree target) {
 /// emit_varpool_aliases - Output any aliases associated with the given varpool
 /// node.
 static void emit_varpool_aliases(struct varpool_node *node) {
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 6 && GCC_MINOR < 7)
   for (struct varpool_node *alias = node->extra_name; alias;
        alias = alias->next)
     emit_alias(alias->decl, node->decl);
@@ -1049,7 +1070,11 @@ static void emit_varpool_aliases(struct varpool_node *node) {
     if (lookup_attribute("weakref",
                          DECL_ATTRIBUTES(varpool_symbol(alias)->decl)))
       continue;
+#if GCC_MAJOR > 5
+    emit_alias(varpool_symbol(alias)->decl, alias->get_constructor());
+#else
     emit_alias(varpool_symbol(alias)->decl, alias->alias_of);
+#endif
     emit_varpool_aliases(alias);
   }
 #endif
