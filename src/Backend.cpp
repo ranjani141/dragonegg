@@ -197,10 +197,22 @@ static struct varpool_node *varpool_symbol(struct varpool_node *N) { return N; }
 #define ipa_ref_list_referring_iterate(L,I,P) \
   (L)->referring.iterate ((I), &(P))
 
-static inline struct varpool_node *ipa_ref_referring_varpool_node(struct ipa_ref *ref) { return reinterpret_cast<varpool_node *>(ref->referring); }
+static inline struct cgraph_node *
+ipa_ref_referring_node(struct ipa_ref *ref) {
+  return reinterpret_cast<cgraph_node *>(ref->referring);
+}
 
-static symtab_node *cgraph_symbol(cgraph_node *N) { return symtab_node::get(N->orig_decl); }
-static symtab_node *varpool_symbol(varpool_node *N) { return symtab_node::get(N->get_constructor()); }
+static inline struct varpool_node *
+ipa_ref_referring_varpool_node(struct ipa_ref *ref) {
+  return reinterpret_cast<varpool_node *>(ref->referring);
+}
+
+static symtab_node *cgraph_symbol(cgraph_node *N) {
+  return symtab_node::get(N->orig_decl);
+}
+static symtab_node *varpool_symbol(varpool_node *N) {
+  return symtab_node::get(N->get_constructor());
+}
 
 #else
 
@@ -1400,7 +1412,7 @@ Value *make_decl_llvm(tree decl) {
       FnEntry =
           Function::Create(Ty, Function::ExternalLinkage, Name, TheModule);
       FnEntry->setCallingConv(CC);
-      FnEntry->setAttributes(PAL);
+      // FIXME: how to convert AttributeSet -> AttributeList FnEntry->setAttributes(PAL);
 
       // Check for external weak linkage.
       if (DECL_EXTERNAL(decl) && DECL_WEAK(decl))
@@ -1674,8 +1686,10 @@ static void llvm_start_unit(void */*gcc_data*/, void */*user_data*/) {
   EmitIR |= flag_generate_lto != 0;
   // We have the same needs as GCC's LTO.  Always claim to be doing LTO.
   flag_lto =
-#if (GCC_MINOR > 5)
+#if (GCC_MAJOR < 5 && GCC_MINOR > 5)
       "";
+#elif GCC_MAJOR > 5
+  "";
 #else
   1;
 #endif
@@ -1707,7 +1721,7 @@ static void llvm_start_unit(void */*gcc_data*/, void */*user_data*/) {
 /// emit_cgraph_aliases - Output any aliases associated with the given cgraph
 /// node.
 static void emit_cgraph_aliases(struct cgraph_node *node) {
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
   struct cgraph_node *alias, *next;
   for (alias = node->same_body; alias && alias->next; alias = alias->next)
     ;
@@ -1750,7 +1764,11 @@ static void emit_current_function() {
   }
 
   // Output any associated aliases.
+#if GCC_MAJOR > 5
+  emit_cgraph_aliases(cgraph_node::get(current_function_decl));
+#else
   emit_cgraph_aliases(cgraph_get_node(current_function_decl));
+#endif
 
   if (!errorcount && !sorrycount) { // Do not process broken code.
     createPerFunctionOptimizationPasses();
@@ -1774,13 +1792,17 @@ static unsigned int rtl_emit_function(void) {
   }
 
   // Free tree-ssa data structures.
-#if (GCC_MINOR < 8)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 8)
   execute_free_datastructures();
 #else
   free_dominance_info(CDI_DOMINATORS);
   free_dominance_info(CDI_POST_DOMINATORS);
   // And get rid of annotations we no longer need.
+#if GCC_MAJOR > 5
+  delete_tree_cfg_annotations(DECL_STRUCT_FUNCTION(current_function_decl));
+#else
   delete_tree_cfg_annotations();
+#endif
 #endif
 
   // Finally, we have written out this function!
@@ -1788,6 +1810,7 @@ static unsigned int rtl_emit_function(void) {
   return 0;
 }
 
+#if GCC_MAJOR < 6
 /// pass_rtl_emit_function - RTL pass that converts a function to LLVM IR.
 static struct rtl_opt_pass pass_rtl_emit_function = { {
   RTL_PASS, "rtl_emit_function",         /* name */
@@ -1805,6 +1828,7 @@ static struct rtl_opt_pass pass_rtl_emit_function = { {
   PROP_ssa | PROP_trees,                 /* properties_destroyed */
   TODO_verify_ssa | TODO_verify_flow | TODO_verify_stmts
 } };
+#endif
 
 /// emit_file_scope_asms - Output any file-scope assembly.
 static void emit_file_scope_asms() {
