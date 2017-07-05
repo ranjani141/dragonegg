@@ -82,6 +82,7 @@ extern "C" {
 #include "gcc-plugin.h"
 #if GCC_MAJOR > 5
 #include "cgraph.h"
+#include "stor-layout.h"
 #endif
 #include "intl.h"
 #include "langhooks.h"
@@ -1184,14 +1185,20 @@ static void emit_global(tree decl) {
   // is not taken).  However if -fmerge-all-constants was specified then allow
   // merging even if the address was taken.  Note that merging will only happen
   // if the global is constant or later proved to be constant by the optimizers.
-  GV->setUnnamedAddr(flag_merge_constants >= 2 || !TREE_ADDRESSABLE(decl));
+  GV->setUnnamedAddr(flag_merge_constants >= 2 || !TREE_ADDRESSABLE(decl) ?
+          llvm::GlobalValue::UnnamedAddr::Global :
+          llvm::GlobalValue::UnnamedAddr::Local);
 
   handleVisibility(decl, GV);
 
   // Set the section for the global.
   if (isa<VAR_DECL>(decl)) {
     if (DECL_SECTION_NAME(decl)) {
-      GV->setSection(TREE_STRING_POINTER(DECL_SECTION_NAME(decl)));
+#if GCC_MAJOR > 5
+      GV->setSection(StringRef(DECL_SECTION_NAME(decl)));
+#else
+      GV->setSection(StringRef(TREE_STRING_POINTER(DECL_SECTION_NAME(decl))));
+#endif
 #ifdef LLVM_IMPLICIT_TARGET_GLOBAL_VAR_SECTION
     } else if (const char *Section =
                    LLVM_IMPLICIT_TARGET_GLOBAL_VAR_SECTION(decl)) {
@@ -1255,8 +1262,10 @@ static void emit_global(tree decl) {
   // Output any associated aliases.
   if (isa<VAR_DECL>(decl))
     if (struct varpool_node *vnode =
-#if (GCC_MINOR < 6)
-            varpool_node(decl)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 6)
+        varpool_node(decl)
+#elif GCC_MAJOR > 5
+        varpool_node::get(decl)
 #else
         varpool_get_node(decl)
 #endif
@@ -1363,7 +1372,11 @@ Value *make_decl_llvm(tree decl) {
 
   // Specifying a section attribute on a variable forces it into a
   // non-.bss section, and thus it cannot be common.
+#if GCC_MAJOR > 5
+  if (isa<VAR_DECL>(decl) && DECL_SECTION_NAME(decl) != NULL &&
+#else
   if (isa<VAR_DECL>(decl) && DECL_SECTION_NAME(decl) != NULL_TREE &&
+#endif
       DECL_INITIAL(decl) == NULL_TREE && DECL_COMMON(decl))
     DECL_COMMON(decl) = 0;
 
