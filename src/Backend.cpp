@@ -1810,8 +1810,8 @@ static unsigned int rtl_emit_function(void) {
   return 0;
 }
 
-#if GCC_MAJOR < 6
 /// pass_rtl_emit_function - RTL pass that converts a function to LLVM IR.
+#if GCC_MAJOR < 6
 static struct rtl_opt_pass pass_rtl_emit_function = { {
   RTL_PASS, "rtl_emit_function",         /* name */
 #if (GCC_MINOR >= 8)
@@ -1828,21 +1828,47 @@ static struct rtl_opt_pass pass_rtl_emit_function = { {
   PROP_ssa | PROP_trees,                 /* properties_destroyed */
   TODO_verify_ssa | TODO_verify_flow | TODO_verify_stmts
 } };
+#else
+const pass_data pass_data_rtl_emit_function = {
+  RTL_PASS,                              /* type */
+  "rtl_emit_function",                   /* name */
+  OPTGROUP_NONE,                         /* optinfo_flags */
+  TV_NONE,                               /* tv_id */
+  PROP_ssa | PROP_gimple_leh | PROP_cfg, /* properties_required */
+  0,                                     /* properties_provided */
+  PROP_ssa | PROP_trees,                 /* properties_destroyed */
+  0,                                     /* todo_flags_start */
+  TODO_df_finish,                        /* todo_flags_finish */
+};
+
+class pass_rtl_emit_function : public rtl_opt_pass {
+public:
+  pass_rtl_emit_function(gcc::context *ctxt)
+      : rtl_opt_pass(pass_data_rtl_emit_function, ctxt) {}
+
+  virtual unsigned int execute(function *) { return rtl_emit_function(); }
+};
 #endif
 
 /// emit_file_scope_asms - Output any file-scope assembly.
 static void emit_file_scope_asms() {
+#if GCC_MAJOR > 5
+  for (struct asm_node *anode = symtab->first_asm_symbol(); anode; anode = anode->next) {
+#else
   for (struct asm_node *anode = asm_nodes; anode; anode = anode->next) {
+#endif
     tree string = anode->asm_str;
     if (isa<ADDR_EXPR>(string))
       string = TREE_OPERAND(string, 0);
     TheModule->appendModuleInlineAsm(TREE_STRING_POINTER(string));
   }
   // Remove the asms so gcc doesn't waste time outputting them.
+#if GCC_MAJOR < 6
   asm_nodes = NULL;
+#endif
 }
 
-#if (GCC_MINOR > 6)
+#if (GCC_MAJOR < 6 && GCC_MINOR > 6)
 /// get_alias_symbol - Return the name of the aliasee for this alias.
 static tree get_alias_symbol(tree decl) {
   tree alias = lookup_attribute("alias", DECL_ATTRIBUTES(decl));
@@ -1874,7 +1900,7 @@ static void emit_varpool_weakrefs() {
 }
 #endif
 
-#if (GCC_MINOR < 8)
+#if (GCC_MAJOR < 6 && GCC_MINOR < 8)
 INSTANTIATE_VECTOR(alias_pair);
 #endif
 
@@ -1895,7 +1921,7 @@ static void llvm_emit_globals(void * /*gcc_data*/, void * /*user_data*/) {
   struct varpool_node *vnode;
   FOR_EACH_VARIABLE(vnode) {
     // If the node is explicitly marked as not being needed, then skip it.
-#if (GCC_MINOR < 8)
+#if (GCC_MAJOR < 6 && GCC_MINOR < 8)
     if (!vnode->needed)
       continue;
 #endif
@@ -2089,6 +2115,7 @@ static void llvm_finish(void */*gcc_data*/, void */*user_data*/) {
 static bool gate_null(void) { return false; }
 
 /// pass_gimple_null - Gimple pass that does nothing.
+#if GCC_MAJOR < 6
 static struct gimple_opt_pass pass_gimple_null = { {
   GIMPLE_PASS, "*gimple_null", /* name */
 #if (GCC_MINOR >= 8)
@@ -2106,12 +2133,33 @@ static struct gimple_opt_pass pass_gimple_null = { {
   0,                           /* todo_flags_start */
   0                            /* todo_flags_finish */
 } };
+#else
+const pass_data pass_data_gimple_null = {
+  GIMPLE_PASS,    /* type */
+  "*gimple_null", /* name */
+  OPTGROUP_NONE,  /* optinfo_flags */
+  TV_NONE,        /* tv_id */
+  0,              /* properties_required */
+  0,              /* properties_provided */
+  0,              /* properties_destroyed */
+  0,              /* todo_flags_start */
+  0,              /* todo_flags_finish */
+};
+
+class pass_gimple_null : public gimple_opt_pass {
+public:
+  pass_gimple_null(gcc::context *ctxt)
+      : gimple_opt_pass(pass_data_gimple_null, ctxt) {}
+};
+#endif
 
 /// execute_correct_state - Correct the cgraph state to ensure that newly
 /// inserted functions are processed before being converted to LLVM IR.
 static unsigned int execute_correct_state(void) {
+#if GCC_MAJOR < 6
   if (cgraph_state < CGRAPH_STATE_IPA_SSA)
     cgraph_state = CGRAPH_STATE_IPA_SSA;
+#endif
   return 0;
 }
 
@@ -2120,6 +2168,7 @@ static bool gate_correct_state(void) { return true; }
 
 /// pass_gimple_correct_state - Gimple pass that corrects the cgraph state so
 /// newly inserted functions are processed before being converted to LLVM IR.
+#if GCC_MAJOR < 6
 static struct gimple_opt_pass pass_gimple_correct_state = { {
   GIMPLE_PASS, "*gimple_correct_state", /* name */
 #if (GCC_MINOR >= 8)
@@ -2137,8 +2186,32 @@ static struct gimple_opt_pass pass_gimple_correct_state = { {
   0,                                    /* todo_flags_start */
   0                                     /* todo_flags_finish */
 } };
+#else
+const pass_data pass_data_gimple_correct_state = {
+  GIMPLE_PASS,
+  "*gimple_correct_state",
+  OPTGROUP_NONE,
+  TV_NONE,
+  0,
+  0,
+  0,
+  0,
+  0,
+};
+
+class pass_gimple_correct_state : public gimple_opt_pass {
+public:
+  pass_gimple_correct_state(gcc::context *ctxt)
+      : gimple_opt_pass(pass_data_gimple_correct_state, ctxt) {}
+
+  virtual bool gate(function *) { return gate_correct_state(); }
+
+  virtual unsigned int execute(function *) { return execute_correct_state(); }
+};
+#endif
 
 /// pass_ipa_null - IPA pass that does nothing.
+#if GCC_MAJOR < 6
 static struct ipa_opt_pass_d pass_ipa_null = {
   { IPA_PASS, "*ipa_null", /* name */
 #if (GCC_MINOR >= 8)
@@ -2170,8 +2243,10 @@ static struct ipa_opt_pass_d pass_ipa_null = {
   NULL,                    /* function_transform */
   NULL                     /* variable_transform */
 };
+#endif
 
 /// pass_rtl_null - RTL pass that does nothing.
+#if GCC_MAJOR < 6
 static struct rtl_opt_pass pass_rtl_null = { { RTL_PASS, "*rtl_null", /* name */
 #if (GCC_MINOR >= 8)
                                                OPTGROUP_NONE,/* optinfo_flags */
@@ -2188,8 +2263,10 @@ static struct rtl_opt_pass pass_rtl_null = { { RTL_PASS, "*rtl_null", /* name */
                                                0, /* todo_flags_start */
                                                0  /* todo_flags_finish */
 } };
+#endif
 
 /// pass_simple_ipa_null - Simple IPA pass that does nothing.
+#if GCC_MAJOR < 6
 static struct simple_ipa_opt_pass pass_simple_ipa_null = { {
   SIMPLE_IPA_PASS, "*simple_ipa_null", /* name */
 #if (GCC_MINOR >= 8)
@@ -2207,6 +2284,7 @@ static struct simple_ipa_opt_pass pass_simple_ipa_null = { {
   0,                                   /* todo_flags_start */
   0                                    /* todo_flags_finish */
 } };
+#endif
 
 // Garbage collector roots.
 extern const struct ggc_cache_tab gt_ggc_rc__gt_cache_h[];
@@ -2371,7 +2449,7 @@ int __attribute__((visibility("default"))) plugin_init(
 
 // Leave pass_ipa_function_and_variable_visibility.  Needed for correctness.
 
-#if (GCC_MINOR < 6)
+#if (GCC_MAJOR < 6 && GCC_MINOR < 6)
     // Turn off pass_ipa_early_inline.
     pass_info.pass = &pass_simple_ipa_null.pass;
     pass_info.reference_pass_name = "einline_ipa";
@@ -2439,7 +2517,7 @@ int __attribute__((visibility("default"))) plugin_init(
     pass_info.pos_op = PASS_POS_REPLACE;
     register_callback(plugin_name, PLUGIN_PASS_MANAGER_SETUP, NULL, &pass_info);
 
-#if (GCC_MINOR < 8)
+#if (GCC_MAJOR < 6 && GCC_MINOR < 8)
     // Turn off pass_ipa_matrix_reorg.
     pass_info.pass = &pass_simple_ipa_null.pass;
     pass_info.reference_pass_name = "matrix-reorg";
@@ -2486,7 +2564,7 @@ int __attribute__((visibility("default"))) plugin_init(
     pass_info.pos_op = PASS_POS_REPLACE;
     register_callback(plugin_name, PLUGIN_PASS_MANAGER_SETUP, NULL, &pass_info);
 
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 6 && GCC_MINOR < 7)
     // Turn off pass_ipa_type_escape.
     pass_info.pass = &pass_simple_ipa_null.pass;
     pass_info.reference_pass_name = "type-escape-var";
@@ -2502,7 +2580,7 @@ int __attribute__((visibility("default"))) plugin_init(
     pass_info.pos_op = PASS_POS_REPLACE;
     register_callback(plugin_name, PLUGIN_PASS_MANAGER_SETUP, NULL, &pass_info);
 
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 6 && GCC_MINOR < 7)
     // Turn off pass_ipa_struct_reorg.
     pass_info.pass = &pass_simple_ipa_null.pass;
     pass_info.reference_pass_name = "ipa_struct_reorg";
@@ -2525,7 +2603,7 @@ int __attribute__((visibility("default"))) plugin_init(
   pass_info.pos_op = PASS_POS_REPLACE;
   register_callback(plugin_name, PLUGIN_PASS_MANAGER_SETUP, NULL, &pass_info);
 
-#if (GCC_MINOR < 6)
+#if (GCC_MAJOR < 6 && GCC_MINOR < 6)
   pass_info.pass = &pass_ipa_null.pass;
   pass_info.reference_pass_name = "lto_wpa_fixup";
   pass_info.ref_pass_instance_number = 0;
@@ -2610,7 +2688,7 @@ int __attribute__((visibility("default"))) plugin_init(
   register_callback(plugin_name, PLUGIN_PASS_MANAGER_SETUP, NULL, &pass_info);
 
   // Turn off all other rtl passes.
-#if (GCC_MINOR < 8)
+#if (GCC_MAJOR < 6 && GCC_MINOR < 8)
   pass_info.pass = &pass_gimple_null.pass;
 #else
   pass_info.pass = &pass_rtl_null.pass;
