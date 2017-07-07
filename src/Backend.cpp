@@ -31,8 +31,10 @@
 // LLVM headers
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringExtras.h"
+#if LLVM_VERSION_MAJOR > 3
 #include "llvm/Bitcode/BitcodeReader.h"
 #include "llvm/Bitcode/BitcodeWriter.h"
+#endif
 #include "llvm/CodeGen/RegAllocRegistry.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/IRPrintingPasses.h"
@@ -49,7 +51,9 @@
 #include "llvm/Target/TargetSubtargetInfo.h"
 #include "llvm/Transforms/IPO.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
+#if LLVM_VERSION_MAJOR > 3
 #include "llvm/Transforms/IPO/AlwaysInliner.h"
+#endif
 #include "llvm/Target/TargetOptions.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm-c/Target.h"
@@ -1838,7 +1842,7 @@ const pass_data pass_data_rtl_emit_function = {
   0,                                     /* properties_provided */
   PROP_ssa | PROP_trees,                 /* properties_destroyed */
   0,                                     /* todo_flags_start */
-  TODO_df_finish,                        /* todo_flags_finish */
+  0,                                     /* todo_flags_finish */
 };
 
 class pass_rtl_emit_function : public rtl_opt_pass {
