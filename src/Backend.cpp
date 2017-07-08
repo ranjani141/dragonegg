@@ -811,7 +811,11 @@ static void createPerModuleOptimizationPasses() {
   } else {
     // Run the always-inline pass to handle functions marked as always_inline.
     // TODO: Consider letting the GCC inliner do this.
+#if LLVM_VERSION_MAJOR > 3
     InliningPass = createAlwaysInlinerLegacyPass();
+#else
+    InliningPass = createAlwaysInlinerPass();
+#endif
   }
 
   PassBuilder.OptLevel = ModuleOptLevel();
