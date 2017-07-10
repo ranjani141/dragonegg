@@ -166,7 +166,7 @@ struct WeakVHCacheHasher : ggc_cache_ptr_hash<tree2WeakVH> {
     return ggc_marked_p(t2W->base.from);
   }
 };
-static GTY((cache)) hash_table<WeakVHCacheHasher> WeakVHCache;
+static GTY((cache)) hash_table<WeakVHCacheHasher> *WeakVHCache;
 #endif
 
 // Include the garbage collector header.
