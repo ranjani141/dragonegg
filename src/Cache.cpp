@@ -45,7 +45,11 @@ extern "C" {
 #include "system.h"
 #include "coretypes.h"
 #include "tm.h"
+#if (GCC_MAJOR < 6)
 #include "tree.h"
+#else
+#include "tree-core.h"
+#endif
 
 #include "ggc.h"
 #ifndef ENABLE_BUILD_WITH_CXX
@@ -65,8 +69,27 @@ struct GTY(()) tree2int {
 #define tree2int_hash tree_map_base_hash
 #define tree2int_marked_p tree_map_base_marked_p
 
-static GTY((if_marked("tree2int_marked_p"), param_is(struct tree2int)))
-    htab_t intCache;
+#if (GCC_MAJOR < 6)
+// FIXME: gengtype not support macro?
+//static GTY((if_marked("tree2int_marked_p"), param_is(struct tree2int)))
+//    htab_t intCache;
+#else
+struct intCacheHasher : ggc_cache_ptr_hash<tree2int> {
+  static inline hashval_t hash(tree2int *t2i) {
+    return tree_map_base_hash(t2i->base);
+  }
+
+  static inline bool equal(tree2int *a, tree2int *b) {
+    return a->base.from == b->base.from;
+  }
+
+  static int keep_cache_entry(tree2int *&t2i) {
+    return ggc_marked_p(t2i->base.from);
+  }
+};
+static GTY((cache))
+    hash_table<intCacheHasher> *intCache;
+#endif
 
 // Hash table mapping trees to Type*.
 
@@ -87,8 +110,25 @@ struct GTY(()) tree2Type {
 #define tree2Type_hash tree_map_base_hash
 #define tree2Type_marked_p tree_map_base_marked_p
 
-static GTY((if_marked("tree2Type_marked_p"), param_is(struct tree2Type)))
-    htab_t TypeCache;
+#if (GCC_MAJOR < 6)
+//static GTY((if_marked("tree2Type_marked_p"), param_is(struct tree2Type)))
+//    htab_t TypeCache;
+#else
+struct TypeCacheHaser : ggc_cache_ptr_hash<tree2Type> {
+  static inline hashval_t hash(tree2Type *t2T) {
+    return tree_map_base_hash(t2T->base);
+  }
+
+  static inline bool equal(tree2Type *a, tree2Type *b) {
+    return a->base.from == b->base.from;
+  }
+
+  static int keep_cache_entry(tree2Type *&t2T) {
+    return ggc_marked_p(t2T->base.from);
+  }
+};
+static GTY((cache)) hash_table<TypeCacheHaser> *TypeCache;
+#endif
 
 // Hash table mapping trees to WeakVH.
 
@@ -109,17 +149,38 @@ struct GTY(()) tree2WeakVH {
 #define tree2WeakVH_hash tree_map_base_hash
 #define tree2WeakVH_marked_p tree_map_base_marked_p
 
-static GTY((if_marked("tree2WeakVH_marked_p"), param_is(struct tree2WeakVH)))
-    htab_t WeakVHCache;
+#if (GCC_MAJOR < 6)
+//static GTY((if_marked("tree2WeakVH_marked_p"), param_is(struct tree2WeakVH)))
+//    htab_t WeakVHCache;
+#else
+struct WeakVHCacheHasher : ggc_cache_ptr_hash<tree2WeakVH> {
+  static inline hashval_t hash(tree2WeakVH *t2W) {
+    return tree_map_base_hash(t2W->base);
+  }
+
+  static inline bool equal(tree2WeakVH *a, tree2WeakVH *b) {
+    return a->base.from == b->base.from;
+  }
+
+  static int keep_cache_entry(tree2WeakVH *&t2W) {
+    return ggc_marked_p(t2W->base.from);
+  }
+};
+static GTY((cache)) hash_table<WeakVHCacheHasher> WeakVHCache;
+#endif
 
 // Include the garbage collector header.
 #ifndef ENABLE_BUILD_WITH_CXX
 extern "C" {
 #endif
+#if (GCC_MAJOR < 6)
 #if (GCC_MINOR > 5)
 #include "dragonegg/gt-cache-4.6.inc"
 #else
 #include "dragonegg/gt-cache-4.5.inc"
+#endif
+#else
+#include "dragonegg/gt-cache-6.3.inc"
 #endif
 #ifndef ENABLE_BUILD_WITH_CXX
 } // extern "C"
