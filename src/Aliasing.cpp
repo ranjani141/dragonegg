@@ -59,7 +59,12 @@ extern "C" {
 
 using namespace llvm;
 
+// https://reviews.llvm.org/D19094
+#if LLVM_VERSION_MINOR > 8
 static LLVMContext Context;
+#else
+static LLVMContext &Context = getGlobalContext();
+#endif
 
 /// getTBAARoot - Return the root of the TBAA tree for this compilation unit.
 static MDNode *getTBAARoot() {

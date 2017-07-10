@@ -63,7 +63,11 @@ template <typename> class TrackingVH;
 }
 class DebugInfo;
 
+#if (LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
 typedef llvm::IRBuilder<llvm::TargetFolder> LLVMBuilder;
+#else
+typedef llvm::IRBuilder<true, llvm::TargetFolder> LLVMBuilder;
+#endif
 
 // Global state.
 

@@ -43,6 +43,7 @@ class CallInst;
 class Function;
 class Module;
 
+#if (LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
 /// DIDescriptor - A thin wraper around MDNode to access encoded debug info.
 /// This should not be stored in a container, because underly MDNode may
 /// change in certain situations.
@@ -89,6 +90,7 @@ public:
     return getDescriptorField(Idx);
   }
 };
+#endif
 }
 
 /// DebugInfo - This class gathers all debug information during compilation and
@@ -196,7 +198,11 @@ public:
   llvm::DIDescriptor findRegion(tree_node *n);
 
   /// getOrCreateNameSpace - Get name space descriptor for the tree node.
+#if (LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
   llvm::DINamespace getOrCreateNameSpace(tree_node *Node,
+#else
+  llvm::DINameSpace getOrCreateNameSpace(tree_node *Node,
+#endif
                                          llvm::DIDescriptor Context);
 
   /// getFunctionName - Get function name for the given FnDecl. If the
