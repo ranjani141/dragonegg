@@ -81,10 +81,6 @@ struct intCacheHasher : ggc_cache_ptr_hash<tree2int> {
   static inline bool equal(tree2int *a, tree2int *b) {
     return a->base.from == b->base.from;
   }
-
-  static int keep_cache_entry(tree2int *&t2i) {
-    return ggc_marked_p(t2i->base.from);
-  }
 };
 static GTY((cache))
     hash_table<intCacheHasher> *intCache;
@@ -120,10 +116,6 @@ struct TypeCacheHaser : ggc_cache_ptr_hash<tree2Type> {
 
   static inline bool equal(tree2Type *a, tree2Type *b) {
     return a->base.from == b->base.from;
-  }
-
-  static int keep_cache_entry(tree2Type *&t2T) {
-    return ggc_marked_p(t2T->base.from);
   }
 };
 static GTY((cache)) hash_table<TypeCacheHaser> *TypeCache;

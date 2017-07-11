@@ -50,6 +50,10 @@ extern "C" {
 #include "coretypes.h"
 #include "tm.h"
 #include "tree.h"
+#if (GCC_MAJOR > 5)
+#include "print-tree.h"
+#include "stor-layout.h"
+#endif
 
 #if (GCC_MINOR < 7)
 #include "flags.h" // For POINTER_TYPE_OVERFLOW_UNDEFINED.
@@ -64,7 +68,11 @@ extern "C" {
 
 using namespace llvm;
 
+#if (LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+static LLVMContext Context;
+#else
 static LLVMContext &Context = getGlobalContext();
+#endif
 
 // Forward declarations.
 static Constant *ConvertInitializerImpl(tree, TargetFolder &);

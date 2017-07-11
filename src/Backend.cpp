@@ -2620,8 +2620,9 @@ int __attribute__((visibility("default"))) plugin_init(
   TakeoverAsmOutput();
 
   // Register our garbage collector roots.
+  // https://gcc.gnu.org/ml/gcc-patches/2014-11/msg02965.html
 #if GCC_MAJOR < 6
-  register_callback(plugin_name, PLUGIN_REGISTER_GGC_CACHES/* FIXME */, NULL,
+  register_callback(plugin_name, PLUGIN_REGISTER_GGC_CACHES, NULL,
 #else
   register_callback(plugin_name, PLUGIN_REGISTER_GGC_ROOTS, NULL,
 #endif
