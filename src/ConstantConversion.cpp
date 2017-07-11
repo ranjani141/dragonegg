@@ -56,6 +56,7 @@ extern "C" {
 #if (GCC_MAJOR > 5)
 #include "print-tree.h"
 #include "stor-layout.h"
+#include "fold-const.h"
 #endif
 
 #if (GCC_MINOR < 7)
@@ -899,14 +900,23 @@ static Constant *ConvertArrayCONSTRUCTOR(tree exp, TargetFolder &Folder) {
 
       assert(host_integerp(first, 1) && host_integerp(last, 1) &&
              "Unknown range_expr!");
+#if GCC_MAJOR > 5
+      FirstIndex = tree_to_shwi(first);
+      LastIndex = tree_to_shwi(last);
+#else
       FirstIndex = tree_low_cst(first, 1);
       LastIndex = tree_low_cst(last, 1);
+#endif
     } else {
       // Subtract off the lower bound if any to ensure indices start from zero.
       if (lower_bnd != NULL_TREE)
         index = fold_build2(MINUS_EXPR, main_type(index), index, lower_bnd);
       assert(host_integerp(index, 1));
+#if GCC_MAJOR > 5
+      FirstIndex = tree_to_shwi(index);
+#else
       FirstIndex = tree_low_cst(index, 1);
+#endif
       LastIndex = FirstIndex;
     }
 
