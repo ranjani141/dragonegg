@@ -33,6 +33,9 @@
 #include "llvm/IR/GlobalVariable.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/Support/Host.h"
+#if LLVM_VERSION_MAJOR >= 3
+#include "llvm/Target/TargetMachine.h"
+#endif
 
 // System headers
 #include <gmp.h>
@@ -580,7 +583,11 @@ static Constant *ExtractRegisterFromConstantImpl(
 /// byte StartingByte.
 Constant *
 ExtractRegisterFromConstant(Constant *C, tree type, int StartingByte) {
-  TargetFolder Folder(&getDataLayout());
+#if (LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+  TargetFolder Folder(TheTarget->createDataLayout());
+#else
+  TargetFolder Folder(TheTarget->getSubtargetImpl()->getDataLayout());
+#endif
   return ExtractRegisterFromConstantImpl(C, type, StartingByte, Folder);
 }
 
