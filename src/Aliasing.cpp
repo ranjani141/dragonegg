@@ -60,7 +60,7 @@ extern "C" {
 using namespace llvm;
 
 // https://reviews.llvm.org/D19094
-#if LLVM_VERSION_MINOR > 8
+#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
 static LLVMContext Context;
 #else
 static LLVMContext &Context = getGlobalContext();

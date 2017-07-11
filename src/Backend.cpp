@@ -154,10 +154,11 @@ TargetMachine *TheTarget = 0;
 TargetFolder *TheFolder = 0;
 raw_ostream *OutStream = 0; // Stream to write assembly code to.
 #if (LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
-std::shared_ptr<formatted_raw_ostream> FormattedOutStream;
+std::shared_ptr<formatted_raw_ostream>
 #else
-formatted_raw_ostream FormattedOutStream;
+formatted_raw_ostream
 #endif
+      FormattedOutStream;
 
 static bool DebugPassArguments;
 static bool DebugPassStructure;
@@ -371,19 +372,20 @@ static bool SizeOfGlobalMatchesDecl(GlobalValue *GV, tree decl) {
   // TODO: Change getTypeSizeInBits for aggregate types so it is no longer
   // rounded up to the alignment.
   uint64_t gcc_size = getInt64(DECL_SIZE(decl), true);
-#if LLVM_VERSION_MAJOR > 3
-  const DataLayout *DL = TheTarget->createDataLayout();
+  const DataLayout *DL =
+#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+      TheTarget->createDataLayout();
 #else
-  const DataLayout *DL = TheTarget->getSubtargetImpl()->getDataLayout();
+      TheTarget->getSubtargetImpl()->getDataLayout();
 #endif
   unsigned Align = 8 * DL->getABITypeAlignment(Ty);
-#if LLVM_VERSION_MAJOR > 3
-  return TheTarget->createDataLayout()->getTypeAllocSizeInBits(Ty) ==
-      ((gcc_size + Align - 1) / Align) * Align;
+  return
+#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+       TheTarget->createDataLayout()->getTypeAllocSizeInBits(Ty)
 #else
-  return TheTarget->getSubtargetImpl()->getDataLayout()->getTypeAllocSizeInBits(
-             Ty) == ((gcc_size + Align - 1) / Align) * Align;
+       TheTarget->getSubtargetImpl()->getDataLayout()->getTypeAllocSizeInBits(Ty)
 #endif
+       == ((gcc_size + Align - 1) / Align) * Align;
 }
 #endif
 
@@ -534,10 +536,11 @@ static void CreateTargetMachine(const std::string &TargetTriple) {
 
   // The target can set LLVM_SET_RELOC_MODEL to configure the relocation model
   // used by the LLVM backend.
-#if (LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
-  Reloc::Model RelocModel = Reloc::Static;
+  Reloc::Model RelocModel =
+#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+      Reloc::Static;
 #else
-  Reloc::Model RelocModel = Reloc::Default;
+      Reloc::Default;
 #endif
 #ifdef LLVM_SET_RELOC_MODEL
   LLVM_SET_RELOC_MODEL(RelocModel);
@@ -613,11 +616,11 @@ static void CreateTargetMachine(const std::string &TargetTriple) {
 
   TheTarget = TME->createTargetMachine(TargetTriple, CPU, FeatureStr, Options,
                                        RelocModel, CMModel, CodeGenOptLevel());
-#if LLVM_VERSION_MAJOR > 3
+
+#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
   assert(TheTarget->createDataLayout()->isBigEndian() == BYTES_BIG_ENDIAN);
 #else
-  assert(TheTarget->getSubtargetImpl()->getDataLayout()->isBigEndian() ==
-         BYTES_BIG_ENDIAN);
+  assert(TheTarget->getSubtargetImpl()->getDataLayout()->isBigEndian() == BYTES_BIG_ENDIAN);
 #endif
 }
 
@@ -642,12 +645,13 @@ static void output_ident(const char *ident_str) {
 static void CreateModule(const std::string &TargetTriple) {
   // Create the module itself.
   StringRef ModuleID = main_input_filename ? main_input_filename : "";
-#if (LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
-  LLVMContext Context;
-  TheModule = new Module(ModuleID, Context);
+  TheModule = new Module(ModuleID,
+#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+                         TheContext
 #else
-  TheModule = new Module(ModuleID, getGlobalContext());
+                         getGlobalContext()
 #endif
+                         );
 
 #if (GCC_MAJOR < 5 && GCC_MINOR < 8)
 #ifdef IDENT_ASM_OP
@@ -762,7 +766,8 @@ static void InitializeBackend(void) {
   PassBuilder.LoopVectorize = flag_tree_vectorize;
 
 #if (LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
-  PassBuilder.LibraryInfo = new TargetLibraryInfoImpl((Triple) TheModule->getTargetTriple());
+  PassBuilder.LibraryInfo =
+      new TargetLibraryInfoImpl((Triple) TheModule->getTargetTriple());
 #else
   PassBuilder.LibraryInfo =
       new TargetLibraryInfo((Triple) TheModule->getTargetTriple());
@@ -987,11 +992,13 @@ static void CreateStructorsList(std::vector<std::pair<Constant *, int> > &Tors,
 /// global if possible.
 Constant *ConvertMetadataStringToGV(const char *str) {
 
-#if (LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
-  Constant *Init = ConstantDataArray::getString(TheContext, str);
+  Constant *Init = ConstantDataArray::getString(
+#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+          TheContext,
 #else
-  Constant *Init = ConstantDataArray::getString(getGlobalContext(), str);
+          getGlobalContext(),
 #endif
+          str);
 
   // Use cached string if it exists.
   static std::map<Constant *, GlobalVariable *> StringCSTCache;
@@ -1303,13 +1310,12 @@ static void emit_global(tree decl) {
   // is not taken).  However if -fmerge-all-constants was specified then allow
   // merging even if the address was taken.  Note that merging will only happen
   // if the global is constant or later proved to be constant by the optimizers.
-#if (LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
-  GV->setUnnamedAddr(flag_merge_constants >= 2 || !TREE_ADDRESSABLE(decl) ?
-          llvm::GlobalValue::UnnamedAddr::Global :
-          llvm::GlobalValue::UnnamedAddr::Local);
-#else
-  GV->setUnnamedAddr(flag_merge_constants >= 2 || !TREE_ADDRESSABLE(decl));
+  GV->setUnnamedAddr(flag_merge_constants >= 2 || !TREE_ADDRESSABLE(decl)
+#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+          ? llvm::GlobalValue::UnnamedAddr::Global
+          : llvm::GlobalValue::UnnamedAddr::Local
 #endif
+          );
 
   handleVisibility(decl, GV);
 

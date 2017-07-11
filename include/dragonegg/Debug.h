@@ -199,11 +199,11 @@ public:
 
   /// getOrCreateNameSpace - Get name space descriptor for the tree node.
 #if (LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
-  llvm::DINamespace getOrCreateNameSpace(tree_node *Node,
+  llvm::DINamespace
 #else
-  llvm::DINameSpace getOrCreateNameSpace(tree_node *Node,
+  llvm::DINameSpace
 #endif
-                                         llvm::DIDescriptor Context);
+         getOrCreateNameSpace(tree_node *Node, llvm::DIDescriptor Context);
 
   /// getFunctionName - Get function name for the given FnDecl. If the
   /// name is constructred on demand (e.g. C++ destructor) then the name
