@@ -69,8 +69,24 @@ extern "C" {
 #include "toplev.h"
 #if GCC_MAJOR < 6
 #include "tree-flow.h"
+#else
+#include "builtins.h"
+#include "stor-layout.h"
+#include "print-tree.h"
+#include "function.h"
+#include "cfg.h"
+#include "basic-block.h"
+#include "gimple.h"
+#include "tree-cfg.h"
+#include "gimple-iterator.h"
+#include "gimple-pretty-print.h"
 #endif
 #include "tree-pass.h"
+
+#if GCC_MAJOR > 5
+#define ENTRY_BLOCK_PTR         (cfun->cfg->x_entry_block_ptr)
+#define FOR_EACH_BB(BB) FOR_EACH_BB_FN (BB, cfun)
+#endif
 
 using namespace llvm;
 
@@ -99,7 +115,11 @@ extern void debug_gimple_stmt(union gimple_statement_d *);
 // Trees header.
 #include "dragonegg/Trees.h"
 
+#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+static LLVMContext Context;
+#else
 static LLVMContext &Context = getGlobalContext();
+#endif
 
 #define DEBUG_TYPE "dragonegg"
 STATISTIC(NumBasicBlocks, "Number of basic blocks converted");
@@ -110,7 +130,7 @@ STATISTIC(NumStatements, "Number of gimple statements converted");
 static unsigned int getPointerAlignment(tree exp) {
   assert(isa<ACCESS_TYPE>(TREE_TYPE(exp)) && "Expected a pointer type!");
   unsigned int align =
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 6 && GCC_MINOR < 7)
       get_pointer_alignment(exp, BIGGEST_ALIGNMENT);
 #else
   get_pointer_alignment(exp);
@@ -174,7 +194,11 @@ DisplaceLocationByUnits(MemRef Loc, int32_t Offset, LLVMBuilder &Builder) {
   unsigned AddrSpace = Loc.Ptr->getType()->getPointerAddressSpace();
   Type *UnitPtrTy = GetUnitPointerType(Context, AddrSpace);
   Value *Ptr = Builder.CreateBitCast(Loc.Ptr, UnitPtrTy);
-  Ptr = Builder.CreateConstInBoundsGEP1_32(Ptr, Offset,
+  Ptr = Builder.CreateConstInBoundsGEP1_32(
+#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+                                           UnitPtrTy,
+#endif
+                                           Ptr, Offset,
                                            flag_verbose_asm ? "dsplc" : "");
   Ptr = Builder.CreateBitCast(Ptr, Loc.Ptr->getType());
   uint32_t Align = MinAlign(Loc.getAlignment(), Offset);
@@ -573,7 +597,11 @@ static void StoreRegisterToMemory(Value *V, MemRef Loc, tree type,
 TreeToLLVM *TheTreeToLLVM = 0;
 
 const DataLayout &getDataLayout() {
+#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+  return TheTarget->createDataLayout();
+#else
   return *TheTarget->getSubtargetImpl()->getDataLayout();
+#endif
 }
 
 /// EmitDebugInfo - Return true if debug info is to be emitted for current
@@ -762,7 +790,7 @@ struct FunctionPrologArgumentConversion : public DefaultABIClient {
     tree ResultDecl = DECL_RESULT(FunctionDecl);
     tree RetTy = TREE_TYPE(TREE_TYPE(FunctionDecl));
     if (TREE_CODE(RetTy) == TREE_CODE(TREE_TYPE(ResultDecl))) {
-      TheTreeToLLVM->set_decl_local(ResultDecl, AI);
+      TheTreeToLLVM->set_decl_local(ResultDecl, llvm::dyn_cast<llvm::Value>(AI));
       ++AI;
       return;
     }
@@ -772,11 +800,17 @@ struct FunctionPrologArgumentConversion : public DefaultABIClient {
            "Not type match and not passing by reference?");
     // Create an alloca for the ResultDecl.
     Value *Tmp = TheTreeToLLVM->CreateTemporary(AI->getType());
-    Builder.CreateStore(AI, Tmp);
+    Builder.CreateStore(llvm::dyn_cast<llvm::Value>(AI), Tmp);
 
     TheTreeToLLVM->set_decl_local(ResultDecl, Tmp);
     if (TheDebugInfo && !DECL_IGNORED_P(FunctionDecl)) {
-      TheDebugInfo->EmitDeclare(ResultDecl, dwarf::DW_TAG_auto_variable,
+      // https://reviews.llvm.org/rL243774
+      TheDebugInfo->EmitDeclare(ResultDecl,
+#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+                                dwarf::DW_TAG_invalid,
+#else
+                                dwarf::DW_TAG_auto_variable,
+#endif
                                 "agg.result", RetTy, Tmp, Builder);
     }
     ++AI;
@@ -787,13 +821,13 @@ struct FunctionPrologArgumentConversion : public DefaultABIClient {
            "No explicit return value?");
     AI->setName("scalar.result");
     isShadowRet = true;
-    TheTreeToLLVM->set_decl_local(DECL_RESULT(FunctionDecl), AI);
+    TheTreeToLLVM->set_decl_local(DECL_RESULT(FunctionDecl), llvm::dyn_cast<llvm::Value>(AI));
     ++AI;
   }
 
   void HandleScalarArgument(llvm::Type *LLVMTy, tree /*type*/,
                             unsigned RealSize = 0) {
-    Value *ArgVal = AI;
+    Value *ArgVal = llvm::dyn_cast<llvm::Value>(AI);
     if (ArgVal->getType() != LLVMTy) {
       if (ArgVal->getType()->isPointerTy() && LLVMTy->isPointerTy()) {
         // If this is GCC being sloppy about pointer types, insert a bitcast.
@@ -833,7 +867,7 @@ struct FunctionPrologArgumentConversion : public DefaultABIClient {
       Type *IntPtr = getDataLayout().getIntPtrType(Context, 0);
       Value *Ops[5] = {
         Builder.CreateCast(Instruction::BitCast, Loc, SBP),
-        Builder.CreateCast(Instruction::BitCast, AI, SBP),
+        Builder.CreateCast(Instruction::BitCast, llvm::dyn_cast<llvm::Value>(AI), SBP),
         ConstantInt::get(IntPtr, TREE_INT_CST_LOW(TYPE_SIZE_UNIT(type))),
         Builder.getInt32(LLVM_BYVAL_ALIGNMENT(type)), Builder.getFalse()
       };
@@ -851,7 +885,7 @@ struct FunctionPrologArgumentConversion : public DefaultABIClient {
     // Store the FCA argument into alloca.
     assert(!LocStack.empty());
     Value *Loc = LocStack.back();
-    Builder.CreateStore(AI, Loc);
+    Builder.CreateStore(llvm::dyn_cast<llvm::Value>(AI), Loc);
     AI->setName(NameStack.back());
     ++AI;
   }
@@ -867,7 +901,11 @@ struct FunctionPrologArgumentConversion : public DefaultABIClient {
     // This cast only involves pointers, therefore BitCast.
     Loc = Builder.CreateBitCast(Loc, StructTy->getPointerTo());
 
-    Loc = Builder.CreateStructGEP(Loc, FieldNo, flag_verbose_asm ? "ntr" : "");
+    Loc = Builder.CreateStructGEP(
+#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+                                  StructTy,
+#endif
+                                  Loc, FieldNo, flag_verbose_asm ? "ntr" : "");
     LocStack.push_back(Loc);
   }
   void ExitField() {
@@ -991,7 +1029,12 @@ void TreeToLLVM::StartFunctionBody() {
   TARGET_ADJUST_LLVM_LINKAGE(Fn, FnDecl);
 #endif /* TARGET_ADJUST_LLVM_LINKAGE */
 
-  Fn->setUnnamedAddr(!TREE_ADDRESSABLE(FnDecl));
+  Fn->setUnnamedAddr(!TREE_ADDRESSABLE(FnDecl)
+#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+                     ? llvm::GlobalValue::UnnamedAddr::Global
+                     : llvm::GlobalValue::UnnamedAddr::Local
+#endif
+          );
 
   // Handle visibility style
   handleVisibility(FnDecl, Fn);
@@ -1008,7 +1051,13 @@ void TreeToLLVM::StartFunctionBody() {
 
   // Handle functions in specified sections.
   if (DECL_SECTION_NAME(FnDecl))
-    Fn->setSection(TREE_STRING_POINTER(DECL_SECTION_NAME(FnDecl)));
+    Fn->setSection(
+#if GCC_MAJOR > 5
+            StringRef(DECL_SECTION_NAME(FnDecl))
+#else
+            TREE_STRING_POINTER(DECL_SECTION_NAME(FnDecl))
+#endif
+            );
 
   // Handle used Functions
   if (lookup_attribute("used", DECL_ATTRIBUTES(FnDecl)))
@@ -1117,10 +1166,16 @@ void TreeToLLVM::StartFunctionBody() {
       // alignment of the type (examples are x86-32 aggregates containing long
       // double and large x86-64 vectors), we need to make the copy.
       AI->setName(Name);
-      SET_DECL_LOCAL(Args, AI);
+      SET_DECL_LOCAL(Args, llvm::dyn_cast<llvm::Value>(AI));
       if (!isInvRef && EmitDebugInfo())
-        TheDebugInfo->EmitDeclare(Args, dwarf::DW_TAG_arg_variable, Name,
-                                  TREE_TYPE(Args), AI, Builder);
+        TheDebugInfo->EmitDeclare(Args,
+#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+                                  dwarf::DW_TAG_invalid,
+#else
+                                  dwarf::DW_TAG_arg_variable,
+#endif
+                                  Name, TREE_TYPE(Args),
+                                  llvm::dyn_cast<llvm::Value>(AI), Builder);
       ABIConverter.HandleArgument(TREE_TYPE(Args), ScalarArgs);
     } else {
       // Otherwise, we create an alloca to hold the argument value and provide
@@ -1130,8 +1185,13 @@ void TreeToLLVM::StartFunctionBody() {
       Tmp->setName(Name + "_addr");
       SET_DECL_LOCAL(Args, Tmp);
       if (EmitDebugInfo()) {
-        TheDebugInfo->EmitDeclare(Args, dwarf::DW_TAG_arg_variable, Name,
-                                  TREE_TYPE(Args), Tmp, Builder);
+        TheDebugInfo->EmitDeclare(Args,
+#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+                                  dwarf::DW_TAG_invalid,
+#else
+                                  dwarf::DW_TAG_arg_variable,
+#endif
+                                  Name, TREE_TYPE(Args), Tmp, Builder);
       }
 
       // Emit annotate intrinsic if arg has annotate attr
@@ -1223,16 +1283,28 @@ void TreeToLLVM::PopulatePhiNodes() {
     PhiRecord &P = PendingPhis[Idx];
 
     // Extract the incoming value for each predecessor from the GCC phi node.
+#if GCC_MAJOR > 5
+    for (unsigned i = 0, e = gimple_phi_num_args((const gimple *) P.gcc_phi); i != e; ++i) {
+#else
     for (unsigned i = 0, e = gimple_phi_num_args(P.gcc_phi); i != e; ++i) {
+#endif
       // The incoming GCC basic block.
+#if GCC_MAJOR > 5
+      basic_block bb = gimple_phi_arg_edge((gphi *) P.gcc_phi, i)->src;
+#else
       basic_block bb = gimple_phi_arg_edge(P.gcc_phi, i)->src;
+#endif
 
       // The corresponding LLVM basic block.
       DenseMap<basic_block, BasicBlock *>::iterator BI = BasicBlocks.find(bb);
       assert(BI != BasicBlocks.end() && "GCC basic block not output?");
 
       // The incoming GCC expression.
+#if GCC_MAJOR > 5
+      tree val = gimple_phi_arg((gimple *) P.gcc_phi, i)->def;
+#else
       tree val = gimple_phi_arg(P.gcc_phi, i)->def;
+#endif
 
       // Associate it with the LLVM basic block.
       IncomingValues.push_back(std::make_pair(BI->second, val));
@@ -1246,7 +1318,13 @@ void TreeToLLVM::PopulatePhiNodes() {
       for (++FI; FI != FE && !FI->hasName(); ++FI) {
         assert(FI->getSinglePredecessor() == IncomingValues.back().first &&
                "Anonymous block does not continue predecessor!");
-        IncomingValues.push_back(std::make_pair(FI, val));
+        IncomingValues.push_back(std::make_pair(
+#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+                    llvm::dyn_cast<llvm::BasicBlock>(FI),
+#else
+                    FI,
+#endif
+                    val));
       }
     }
 
@@ -1256,7 +1334,11 @@ void TreeToLLVM::PopulatePhiNodes() {
     // Get the LLVM predecessors for the basic block containing the phi node,
     // and remember their positions in the list of predecessors (this is used
     // to avoid adding phi operands in a non-deterministic order).
-    Predecessors.reserve(gimple_phi_num_args(P.gcc_phi)); // At least this many.
+#if GCC_MAJOR > 5
+    Predecessors.reserve(gimple_phi_num_args((const gimple *) P.gcc_phi)); // At least this many.
+#else
+    Predecessors.reserve(gimple_phi_num_args(P.gcc_phi));
+#endif
     BasicBlock *PhiBB = P.PHI->getParent();
     unsigned Index = 0;
     for (pred_iterator PI = pred_begin(PhiBB), PE = pred_end(PhiBB); PI != PE;
@@ -1501,9 +1583,17 @@ BasicBlock *TreeToLLVM::getBasicBlock(basic_block bb) {
   // use the same naming scheme as GCC.
   if (flag_verbose_asm) {
     // If BB contains labels, name the LLVM basic block after the first label.
+#if GCC_MAJOR > 5
+    gimple *stmt = first_stmt(bb);
+#else
     gimple stmt = first_stmt(bb);
+#endif
     if (stmt && gimple_code(stmt) == GIMPLE_LABEL) {
+#if GCC_MAJOR > 5
+      tree label = gimple_label_label(as_a<glabel *>(stmt));
+#else
       tree label = gimple_label_label(stmt);
+#endif
       const std::string &LabelName = getDescriptiveName(label);
       if (!LabelName.empty())
         BB->setName("<" + LabelName + ">");
@@ -1551,7 +1641,11 @@ void TreeToLLVM::EmitBasicBlock(basic_block bb) {
   // the phi uses may not have been defined yet - phis are special this way.
   for (gimple_stmt_iterator gsi = gsi_start_phis(bb); !gsi_end_p(gsi);
        gsi_next(&gsi)) {
+#if GCC_MAJOR > 5
+    gimple *gcc_phi = gsi_stmt(gsi);
+#else
     gimple gcc_phi = gsi_stmt(gsi);
+#endif
     // Skip virtual operands.
     if (!is_gimple_reg(gimple_phi_result(gcc_phi)))
       continue;
@@ -1568,14 +1662,18 @@ void TreeToLLVM::EmitBasicBlock(basic_block bb) {
     DefineSSAName(name, PHI);
 
     // The phi operands will be populated later - remember the phi node.
-    PhiRecord P = { gcc_phi, PHI };
+    PhiRecord P = { (gimple_statement_d*) gcc_phi, PHI };
     PendingPhis.push_back(P);
   }
 
   // Render statements.
   for (gimple_stmt_iterator gsi = gsi_start_bb(bb); !gsi_end_p(gsi);
        gsi_next(&gsi)) {
+#if GCC_MAJOR > 5
+    gimple *stmt = gsi_stmt(gsi);
+#else
     gimple stmt = gsi_stmt(gsi);
+#endif
     input_location = gimple_location(stmt);
     ++NumStatements;
 
@@ -1596,19 +1694,19 @@ void TreeToLLVM::EmitBasicBlock(basic_block bb) {
       llvm_unreachable("Unhandled GIMPLE statement during LLVM emission!");
 
     case GIMPLE_ASM:
-      RenderGIMPLE_ASM(stmt);
+      RenderGIMPLE_ASM((gimple_statement_d *) stmt);
       break;
 
     case GIMPLE_ASSIGN:
-      RenderGIMPLE_ASSIGN(stmt);
+      RenderGIMPLE_ASSIGN((gimple_statement_d *) stmt);
       break;
 
     case GIMPLE_CALL:
-      RenderGIMPLE_CALL(stmt);
+      RenderGIMPLE_CALL((gimple_statement_d *) stmt);
       break;
 
     case GIMPLE_COND:
-      RenderGIMPLE_COND(stmt);
+      RenderGIMPLE_COND((gimple_statement_d *) stmt);
       break;
 
     case GIMPLE_DEBUG:
@@ -1616,11 +1714,11 @@ void TreeToLLVM::EmitBasicBlock(basic_block bb) {
       break;
 
     case GIMPLE_EH_DISPATCH:
-      RenderGIMPLE_EH_DISPATCH(stmt);
+      RenderGIMPLE_EH_DISPATCH((gimple_statement_d *) stmt);
       break;
 
     case GIMPLE_GOTO:
-      RenderGIMPLE_GOTO(stmt);
+      RenderGIMPLE_GOTO((gimple_statement_d *) stmt);
       break;
 
     case GIMPLE_LABEL:
@@ -1629,15 +1727,15 @@ void TreeToLLVM::EmitBasicBlock(basic_block bb) {
       break;
 
     case GIMPLE_RESX:
-      RenderGIMPLE_RESX(stmt);
+      RenderGIMPLE_RESX((gimple_statement_d *) stmt);
       break;
 
     case GIMPLE_RETURN:
-      RenderGIMPLE_RETURN(stmt);
+      RenderGIMPLE_RETURN((gimple_statement_d *) stmt);
       break;
 
     case GIMPLE_SWITCH:
-      RenderGIMPLE_SWITCH(stmt);
+      RenderGIMPLE_SWITCH((gimple_statement_d *) stmt);
       break;
     }
   }
@@ -1673,7 +1771,11 @@ Function *TreeToLLVM::EmitFunction() {
     FMF.setAllowReciprocal();
   if (flag_unsafe_math_optimizations && flag_finite_math_only)
     FMF.setUnsafeAlgebra();
+#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+  Builder.setFastMathFlags(FMF);
+#else
   Builder.SetFastMathFlags(FMF);
+#endif
 
   // Set up parameters and prepare for return, for the function.
   StartFunctionBody();
@@ -1785,7 +1887,7 @@ LValue TreeToLLVM::EmitLV(tree exp) {
   case INDIRECT_REF:
     LV = EmitLV_INDIRECT_REF(exp);
     break;
-#if (GCC_MINOR < 6)
+#if (GCC_MAJOR < 6 && GCC_MINOR < 6)
   case MISALIGNED_INDIRECT_REF:
     LV = EmitLV_MISALIGNED_INDIRECT_REF(exp);
     break;
@@ -2113,8 +2215,14 @@ void TreeToLLVM::CopyElementByElement(MemRef DestLoc, MemRef SrcLoc,
       int FieldIdx = GetFieldIndex(Field, Ty);
       assert(FieldIdx != INT_MAX && "Should not be copying if no LLVM field!");
       Value *DestFieldPtr = Builder.CreateStructGEP(
+#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+          Ty,
+#endif
           DestLoc.Ptr, FieldIdx, flag_verbose_asm ? "df" : "");
       Value *SrcFieldPtr = Builder.CreateStructGEP(
+#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+          Ty,
+#endif
           SrcLoc.Ptr, FieldIdx, flag_verbose_asm ? "sf" : "");
 
       // Compute the field's alignment.
@@ -2148,8 +2256,14 @@ void TreeToLLVM::CopyElementByElement(MemRef DestLoc, MemRef SrcLoc,
     Value *DestCompPtr = DestLoc.Ptr, *SrcCompPtr = SrcLoc.Ptr;
     if (i) {
       DestCompPtr = Builder.CreateConstInBoundsGEP1_32(
+#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+          CompType,
+#endif
           DestCompPtr, i, flag_verbose_asm ? "da" : "");
       SrcCompPtr = Builder.CreateConstInBoundsGEP1_32(
+#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+          CompType,
+#endif
           SrcCompPtr, i, flag_verbose_asm ? "sa" : "");
     }
 
@@ -2215,7 +2329,11 @@ void TreeToLLVM::ZeroElementByElement(MemRef DestLoc, tree type) {
       // Get the address of the field.
       int FieldIdx = GetFieldIndex(Field, Ty);
       assert(FieldIdx != INT_MAX && "Should not be zeroing if no LLVM field!");
-      Value *FieldPtr = Builder.CreateStructGEP(DestLoc.Ptr, FieldIdx,
+      Value *FieldPtr = Builder.CreateStructGEP(
+#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+                                                Ty,
+#endif
+                                                DestLoc.Ptr, FieldIdx,
                                                 flag_verbose_asm ? "zf" : "");
 
       // Compute the field's alignment.
@@ -2244,6 +2362,9 @@ void TreeToLLVM::ZeroElementByElement(MemRef DestLoc, tree type) {
     Value *CompPtr = DestLoc.Ptr;
     if (i)
       CompPtr = Builder.CreateConstInBoundsGEP1_32(
+#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+          CompType,
+#endif
           CompPtr, i, flag_verbose_asm ? "za" : "");
 
     // Compute the component's alignment.
@@ -2457,7 +2578,12 @@ void TreeToLLVM::EmitAutomaticVariableDecl(tree decl) {
 
   if (EmitDebugInfo()) {
     if (DECL_NAME(decl) || isa<RESULT_DECL>(decl)) {
-      TheDebugInfo->EmitDeclare(decl, dwarf::DW_TAG_auto_variable,
+      TheDebugInfo->EmitDeclare(decl,
+#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+                                dwarf::DW_TAG_invalid,
+#else
+                                dwarf::DW_TAG_auto_variable,
+#endif
                                 AI->getName(), TREE_TYPE(decl), AI, Builder);
     }
   }
