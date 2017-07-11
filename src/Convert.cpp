@@ -67,7 +67,9 @@ extern "C" {
 #include "target.h" // For targetm.
 #include "tm_p.h"
 #include "toplev.h"
+#if GCC_MAJOR < 6
 #include "tree-flow.h"
+#endif
 #include "tree-pass.h"
 
 using namespace llvm;
@@ -3884,7 +3886,11 @@ static std::string CanonicalizeConstraint(const char *Constraint) {
       // REG_CLASS_FROM_CONSTRAINT doesn't support 'r' for some reason.
       RegClass = GENERAL_REGS;
     else
+#if GCC_MAJOR > 5
+      RegClass = reg_class_for_constraint(lookup_constraint(Constraint - 1));
+#else
       RegClass = REG_CLASS_FROM_CONSTRAINT(Constraint[-1], Constraint - 1);
+#endif
 
     if (RegClass == NO_REGS) { // not a reg class.
       Result += ConstraintChar;
@@ -3949,7 +3955,11 @@ static int MatchWeight(const char *Constraint, tree Operand) {
         if (*p == 'r')
           RegClass = GENERAL_REGS;
         else
+#if GCC_MAJOR > 5
+          RegClass = reg_class_for_constraint(lookup_constraint(p));
+#else
           RegClass = REG_CLASS_FROM_CONSTRAINT(*p, p);
+#endif
         if (RegClass != NO_REGS &&
             TEST_HARD_REG_BIT(reg_class_contents[RegClass], RegNum)) {
           RetVal = 1;
@@ -5289,7 +5299,11 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
       if (!validate_gimple_arglist(stmt, REAL_TYPE, VOID_TYPE))
         return 0;
 
+#if GCC_MAJOR > 5
+      if (targetm.libc_has_function(function_sincos)) {
+#else
       if (TARGET_HAS_SINCOS) {
+#endif
         // exp(i*arg) = cos(arg) + i*sin(arg).  Emit a call to sincos.  First
         // determine which version of sincos to call.
         tree arg = gimple_call_arg(stmt, 0);
