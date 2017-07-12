@@ -43,7 +43,7 @@ class CallInst;
 class Function;
 class Module;
 
-#if (LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
 /// DIDescriptor - A thin wraper around MDNode to access encoded debug info.
 /// This should not be stored in a container, because underly MDNode may
 /// change in certain situations.
@@ -198,7 +198,7 @@ public:
   llvm::DIDescriptor findRegion(tree_node *n);
 
   /// getOrCreateNameSpace - Get name space descriptor for the tree node.
-#if (LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
   llvm::DINamespace
 #else
   llvm::DINameSpace

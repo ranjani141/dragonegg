@@ -33,6 +33,15 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/FormattedStream.h"
 
+#define LLVM_VERSION(major, minor) (((major) << 8) | (minor))
+#define LLVM_VERSION_CODE LLVM_VERSION(LLVM_VERSION_MAJOR, LLVM_VERSION_MINOR)
+
+#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 0)
+#  define LLVM_TYPE_Q
+#else
+#  define LLVM_TYPE_Q const
+#endif
+
 #if __has_attribute(sentinel) || LLVM_GNUC_PREREQ(3, 0, 0)
 #define LLVM_END_WITH_NULL __attribute__((sentinel))
 #else
@@ -64,7 +73,7 @@ template <typename> class TrackingVH;
 class DebugInfo;
 
 typedef llvm::IRBuilder<
-#if LLVM_VERSION_MAJOR < 4 && LLVM_VERSION_MINOR < 9
+#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
                         true,
 #endif
                         llvm::TargetFolder> LLVMBuilder;

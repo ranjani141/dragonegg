@@ -31,8 +31,8 @@
 // LLVM headers
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringExtras.h"
-#if LLVM_VERSION_MAJOR >= 3
-#if LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 9)
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 9)
 #include "llvm/Bitcode/BitcodeReader.h"
 #include "llvm/Bitcode/BitcodeWriter.h"
 #include "llvm/Transforms/IPO/AlwaysInliner.h"
@@ -153,7 +153,7 @@ PassManagerBuilder PassBuilder;
 TargetMachine *TheTarget = 0;
 TargetFolder *TheFolder = 0;
 raw_ostream *OutStream = 0; // Stream to write assembly code to.
-#if (LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
 std::shared_ptr<formatted_raw_ostream>
 #else
 formatted_raw_ostream
@@ -177,7 +177,7 @@ std::vector<Constant *> AttributeAnnotateGlobals;
 /// PerFunctionPasses - This is the list of cleanup passes run per-function
 /// as each is compiled.  In cases where we are not doing IPO, it includes the
 /// code generator.
-#if (LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
 static legacy::FunctionPassManager *PerFunctionPasses = 0;
 static legacy::PassManager *PerModulePasses = 0;
 static legacy::PassManager *CodeGenPasses = 0;
@@ -187,7 +187,7 @@ static PassManager *PerModulePasses = 0;
 static PassManager *CodeGenPasses = 0;
 #endif
 
-#if (LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
 static LLVMContext TheContext;
 #endif
 
@@ -373,14 +373,14 @@ static bool SizeOfGlobalMatchesDecl(GlobalValue *GV, tree decl) {
   // rounded up to the alignment.
   uint64_t gcc_size = getInt64(DECL_SIZE(decl), true);
   const DataLayout *DL =
-#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
       TheTarget->createDataLayout();
 #else
       TheTarget->getSubtargetImpl()->getDataLayout();
 #endif
   unsigned Align = 8 * DL->getABITypeAlignment(Ty);
   return
-#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
        TheTarget->createDataLayout()->getTypeAllocSizeInBits(Ty)
 #else
        TheTarget->getSubtargetImpl()->getDataLayout()->getTypeAllocSizeInBits(Ty)
@@ -537,7 +537,7 @@ static void CreateTargetMachine(const std::string &TargetTriple) {
   // The target can set LLVM_SET_RELOC_MODEL to configure the relocation model
   // used by the LLVM backend.
   Reloc::Model RelocModel =
-#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
       Reloc::Static;
 #else
       Reloc::Default;
@@ -557,12 +557,12 @@ static void CreateTargetMachine(const std::string &TargetTriple) {
 
   if (flag_omit_frame_pointer) {
     // Eliminate frame pointers everywhere.
-#if LLVM_VERSION_MAJOR < 4 && LLVM_VERSION_MINOR < 9
+#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
     Options.NoFramePointerElim = false;
 #endif
   } else {
     // Keep frame pointers everywhere.
-#if LLVM_VERSION_MAJOR < 4 && LLVM_VERSION_MINOR < 9
+#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
     Options.NoFramePointerElim = true;
 #endif
   }
@@ -599,13 +599,13 @@ static void CreateTargetMachine(const std::string &TargetTriple) {
   // TODO: TrapFuncName.
   // TODO: -fsplit-stack
   // https://reviews.llvm.org/D19733
-#if LLVM_VERSION_MAJOR < 4 && LLVM_VERSION_MINOR < 9
+#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
   Options.PositionIndependentExecutable = flag_pie;
 #endif
 
 #ifdef LLVM_SET_TARGET_MACHINE_OPTIONS
   // https://reviews.llvm.org/D9830
-#if LLVM_VERSION_MAJOR < 4 && LLVM_VERSION_MINOR < 9
+#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
   LLVM_SET_TARGET_MACHINE_OPTIONS(Options);
 #endif
 #endif
@@ -617,7 +617,7 @@ static void CreateTargetMachine(const std::string &TargetTriple) {
   TheTarget = TME->createTargetMachine(TargetTriple, CPU, FeatureStr, Options,
                                        RelocModel, CMModel, CodeGenOptLevel());
 
-#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
   assert(TheTarget->createDataLayout()->isBigEndian() == BYTES_BIG_ENDIAN);
 #else
   assert(TheTarget->getSubtargetImpl()->getDataLayout()->isBigEndian() == BYTES_BIG_ENDIAN);
@@ -636,7 +636,7 @@ static void output_ident(const char *ident_str) {
   Directive += "\"";
   Directive += ident_str;
   Directive += " LLVM: ";
-  Directive += LLVM_VERSION;
+  Directive += LLVM_VERSION_STRING;
   Directive += "\"";
   TheModule->setModuleInlineAsm(Directive);
 }
@@ -646,7 +646,7 @@ static void CreateModule(const std::string &TargetTriple) {
   // Create the module itself.
   StringRef ModuleID = main_input_filename ? main_input_filename : "";
   TheModule = new Module(ModuleID,
-#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
                          TheContext
 #else
                          getGlobalContext()
@@ -676,7 +676,7 @@ static void CreateModule(const std::string &TargetTriple) {
   // for optimizer use.
   TheModule->setTargetTriple(TargetTriple);
   // https://reviews.llvm.org/D11103
-#if (LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
   TheModule->setDataLayout(TheTarget->createDataLayout());
 #else
   TheModule->setDataLayout(TheTarget->getSubtargetImpl()
@@ -743,7 +743,7 @@ static void InitializeBackend(void) {
   // Create a module to hold the generated LLVM IR.
   CreateModule(TargetTriple);
 
-#if (LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
   TheFolder = new TargetFolder(TheTarget->createDataLayout());
 #else
   TheFolder = new TargetFolder(TheTarget->getSubtargetImpl()->getDataLayout());
@@ -765,7 +765,7 @@ static void InitializeBackend(void) {
 //  PassBuilder.SLPVectorize = flag_tree_slp_vectorize;
   PassBuilder.LoopVectorize = flag_tree_vectorize;
 
-#if (LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
   PassBuilder.LibraryInfo =
       new TargetLibraryInfoImpl((Triple) TheModule->getTargetTriple());
 #else
@@ -790,7 +790,7 @@ static void InitializeOutputStreams(bool Binary) {
     report_fatal_error(EC.message());
 
   // https://reviews.llvm.org/rL234535
-#if (LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
   FormattedOutStream = std::make_shared<formatted_raw_ostream>(*OutStream);
 #else
   FormattedOutStream.setStream(*OutStream,
@@ -804,16 +804,16 @@ static void createPerFunctionOptimizationPasses() {
 
   // Create and set up the per-function pass manager.
   // FIXME: Move the code generator to be function-at-a-time.
-#if (LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
   PerFunctionPasses = new legacy::FunctionPassManager(TheModule);
 #else
   PerFunctionPasses = new FunctionPassManager(TheModule);
 #endif
   // https://reviews.llvm.org/D7992
-#if LLVM_VERSION_MAJOR < 4 && LLVM_VERSION_MINOR < 9
+#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
   PerFunctionPasses->add(new DataLayoutPass());
 #endif
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR >= 3 && LLVM_VERSION_MINOR <= 6
+#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 3) && LLVM_VERSION_CODE <= LLVM_VERSION(3, 6)
   TheTarget->addAnalysisPasses(*PerFunctionPasses);
 #endif
 
@@ -831,7 +831,7 @@ static void createPerFunctionOptimizationPasses() {
   // FIXME: This is disabled right now until bugs can be worked out.  Reenable
   // this for fast -O0 compiles!
   if (!EmitIR && 0) {
-#if (LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
     legacy::FunctionPassManager *PM = PerFunctionPasses;
 #else
     FunctionPassManager *PM = PerFunctionPasses;
@@ -851,7 +851,7 @@ static void createPerFunctionOptimizationPasses() {
     TargetMachine::CodeGenFileType CGFT = TargetMachine::CGFT_AssemblyFile;
     if (EmitObj)
       CGFT = TargetMachine::CGFT_ObjectFile;
-#if LLVM_VERSION_MAJOR < 4 && LLVM_VERSION_MINOR < 9
+#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
     if (TheTarget->addPassesToEmitFile(*PM, FormattedOutStream, CGFT,
                                        DisableVerify))
       llvm_unreachable("Error interfacing to target machine!");
@@ -865,16 +865,16 @@ static void createPerModuleOptimizationPasses() {
   if (PerModulePasses)
     return;
 
-#if (LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
   PerModulePasses = new legacy::PassManager();
 #else
   PerModulePasses = new PassManager();
 #endif
   // https://reviews.llvm.org/D7992
-#if LLVM_VERSION_MAJOR < 4 && LLVM_VERSION_MINOR < 9
+#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
   PerModulePasses->add(new DataLayoutPass());
 #endif
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR >= 3 && LLVM_VERSION_MINOR <= 6
+#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 3) && LLVM_VERSION_CODE <= LLVM_VERSION(3, 6)
   TheTarget->addAnalysisPasses(*PerModulePasses);
 #endif
 
@@ -898,7 +898,7 @@ static void createPerModuleOptimizationPasses() {
   } else {
     // Run the always-inline pass to handle functions marked as always_inline.
     // TODO: Consider letting the GCC inliner do this.
-#if LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 9)
     InliningPass = createAlwaysInlinerLegacyPass();
 #else
     InliningPass = createAlwaysInlinerPass();
@@ -922,14 +922,14 @@ static void createPerModuleOptimizationPasses() {
     // FIXME: This is disabled right now until bugs can be worked out.  Reenable
     // this for fast -O0 compiles!
     if (PerModulePasses || 1) {
-#if (LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
       legacy::PassManager *PM = CodeGenPasses = new legacy::PassManager();
 #else
       PassManager *PM = CodeGenPasses = new PassManager();
 #endif
       // FIXME: https://reviews.llvm.org/D7992
       //PM->add(new DataLayoutPass());
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR >= 3 && LLVM_VERSION_MINOR <= 6
+#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 3) && LLVM_VERSION_CODE <= LLVM_VERSION(3, 6)
       TheTarget->addAnalysisPasses(*PM);
 #endif
 
@@ -947,7 +947,7 @@ static void createPerModuleOptimizationPasses() {
       TargetMachine::CodeGenFileType CGFT = TargetMachine::CGFT_AssemblyFile;
       if (EmitObj)
         CGFT = TargetMachine::CGFT_ObjectFile;
-#if LLVM_VERSION_MAJOR < 4 && LLVM_VERSION_MINOR < 9
+#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
       if (TheTarget->addPassesToEmitFile(*PM, FormattedOutStream, CGFT,
                                          DisableVerify))
         llvm_unreachable("Error interfacing to target machine!");
@@ -964,7 +964,7 @@ static void CreateStructorsList(std::vector<std::pair<Constant *, int> > &Tors,
   std::vector<Constant *> StructInit;
   StructInit.resize(2);
 
-#if (LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MINOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
   LLVMContext &Context = TheContext;
 #else
   LLVMContext &Context = getGlobalContext();
@@ -993,7 +993,7 @@ static void CreateStructorsList(std::vector<std::pair<Constant *, int> > &Tors,
 Constant *ConvertMetadataStringToGV(const char *str) {
 
   Constant *Init = ConstantDataArray::getString(
-#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
           TheContext,
 #else
           getGlobalContext(),
@@ -1019,7 +1019,7 @@ Constant *ConvertMetadataStringToGV(const char *str) {
 /// AddAnnotateAttrsToGlobal - Adds decls that have a annotate attribute to a
 /// vector to be emitted later.
 void AddAnnotateAttrsToGlobal(GlobalValue *GV, tree decl) {
-#if (LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
   LLVMContext &Context = TheContext;
 #else
   LLVMContext &Context = getGlobalContext();
@@ -1311,7 +1311,7 @@ static void emit_global(tree decl) {
   // merging even if the address was taken.  Note that merging will only happen
   // if the global is constant or later proved to be constant by the optimizers.
   GV->setUnnamedAddr(flag_merge_constants >= 2 || !TREE_ADDRESSABLE(decl)
-#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
           ? llvm::GlobalValue::UnnamedAddr::Global
           : llvm::GlobalValue::UnnamedAddr::Local
 #endif
@@ -1468,7 +1468,7 @@ Value *make_decl_llvm(tree decl) {
   if (errorcount || sorrycount)
     return NULL; // Do not process broken code.
 
-#if (LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
   LLVMContext &Context = TheContext;
 #else
   LLVMContext &Context = getGlobalContext();
@@ -1532,7 +1532,7 @@ Value *make_decl_llvm(tree decl) {
       FnEntry =
           Function::Create(Ty, Function::ExternalLinkage, Name, TheModule);
       FnEntry->setCallingConv(CC);
-#if LLVM_VERSION_MAJOR < 4
+#if LLVM_VERSION_CODE < LLVM_VERSION(4, 0)
       FnEntry->setAttributes(PAL);
 #endif
 
@@ -2124,7 +2124,7 @@ static void llvm_finish_unit(void */*gcc_data*/, void */*user_data*/) {
     TheDebugInfo = 0;
   }
 
-#if (LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
   LLVMContext &Context = TheContext;
 #else
   LLVMContext &Context = getGlobalContext();
@@ -2223,7 +2223,7 @@ static void llvm_finish_unit(void */*gcc_data*/, void */*user_data*/) {
     Context.setInlineAsmDiagnosticHandler(OldHandler, OldHandlerData);
   }
 
-#if (LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
   FormattedOutStream->flush();
 #else
   FormattedOutStream.flush();
@@ -2500,9 +2500,9 @@ static FlagDescriptor PluginFlags[] = {
 /// llvm_plugin_info - Information about this plugin.  Users can access this
 /// using "gcc --help -v".
 static struct plugin_info llvm_plugin_info = {
-  LLVM_VERSION, // version
-                // TODO provide something useful here
-  NULL          // help
+  LLVM_VERSION_STRING, // version
+                       // TODO provide something useful here
+  NULL                 // help
 };
 
 #ifndef DISABLE_VERSION_CHECK

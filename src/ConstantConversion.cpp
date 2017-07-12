@@ -33,7 +33,7 @@
 #include "llvm/IR/GlobalVariable.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/Support/Host.h"
-#if LLVM_VERSION_MAJOR >= 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
 #include "llvm/Target/TargetMachine.h"
 #endif
 
@@ -72,7 +72,7 @@ extern "C" {
 
 using namespace llvm;
 
-#if (LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
 static LLVMContext Context;
 #else
 static LLVMContext &Context = getGlobalContext();
@@ -584,7 +584,7 @@ static Constant *ExtractRegisterFromConstantImpl(
 /// byte StartingByte.
 Constant *
 ExtractRegisterFromConstant(Constant *C, tree type, int StartingByte) {
-#if (LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
   TargetFolder Folder(TheTarget->createDataLayout());
 #else
   TargetFolder Folder(&getDataLayout());
@@ -1065,7 +1065,7 @@ public:
     R = other.R;
     C = other.C;
     Starts = other.Starts;
-#if LLVM_VERSION_MAJOR < 4 && LLVM_VERSION_MINOR < 9
+#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
     Folder = other.Folder;
 #endif
     return *this;
@@ -1106,7 +1106,7 @@ public:
     if ((C->getType()->getPrimitiveSizeInBits() % BITS_PER_UNIT) != 0) {
       Type *Ty = C->getType();
       assert(Ty->isIntegerTy() && "Non-integer type with non-byte size!");
-#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
       unsigned BitWidth =
           alignTo(Ty->getPrimitiveSizeInBits(), BITS_PER_UNIT);
 #else
@@ -1399,7 +1399,7 @@ static Constant *ConvertPOINTER_PLUS_EXPR(tree exp, TargetFolder &Folder) {
   // Convert the pointer into an i8* and add the offset to it.
   Ptr = Folder.CreateBitCast(Ptr, GetUnitPointerType(Context));
   Constant *Result = POINTER_TYPE_OVERFLOW_UNDEFINED
-#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
                      ? Folder.CreateInBoundsGetElementPtr(nullptr, Ptr, Idx)
                      : Folder.CreateGetElementPtr(nullptr, Ptr, Idx);
 #else
@@ -1509,7 +1509,7 @@ static Constant *ConvertInitializerImpl(tree exp, TargetFolder &Folder) {
 /// initial value may exceed the alloc size of the LLVM memory type generated
 /// for the GCC type (see ConvertType); it is never smaller than the alloc size.
 Constant *ConvertInitializer(tree exp) {
-#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
   TargetFolder Folder(TheTarget->createDataLayout());
 #else
   TargetFolder Folder(&getDataLayout());
@@ -1544,7 +1544,7 @@ static Constant *AddressOfSimpleConstant(tree exp, TargetFolder &Folder) {
   // Allow identical constants to be merged if the user allowed it.
   // FIXME: maybe this flag should be set unconditionally, and instead the
   // ConstantMerge pass should be disabled if flag_merge_constants is zero.
-#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
   Slot->setUnnamedAddr(flag_merge_constants >= 2 ?
           llvm::GlobalValue::UnnamedAddr::Global :
           llvm::GlobalValue::UnnamedAddr::Local);
@@ -1585,7 +1585,7 @@ static Constant *AddressOfARRAY_REF(tree exp, TargetFolder &Folder) {
   ArrayAddr = Folder.CreateBitCast(ArrayAddr, EltTy->getPointerTo());
 
   return POINTER_TYPE_OVERFLOW_UNDEFINED
-#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
          ? Folder.CreateInBoundsGetElementPtr(nullptr, ArrayAddr, IndexVal)
          : Folder.CreateGetElementPtr(nullptr, ArrayAddr, IndexVal);
 #else
@@ -1629,7 +1629,7 @@ static Constant *AddressOfCOMPONENT_REF(tree exp, TargetFolder &Folder) {
   Type *UnitPtrTy = GetUnitPointerType(Context);
   Constant *StructAddr = AddressOfImpl(TREE_OPERAND(exp, 0), Folder);
   Constant *FieldPtr = Folder.CreateBitCast(StructAddr, UnitPtrTy);
-#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
   FieldPtr = Folder.CreateInBoundsGetElementPtr(nullptr, FieldPtr, Offset);
 #else
   FieldPtr = Folder.CreateInBoundsGetElementPtr(FieldPtr, Offset);
@@ -1758,7 +1758,7 @@ static Constant *AddressOfImpl(tree exp, TargetFolder &Folder) {
 /// type of the pointee is the memory type that corresponds to the type of exp
 /// (see ConvertType).
 Constant *AddressOf(tree exp) {
-#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
   TargetFolder Folder(TheTarget->createDataLayout());
 #else
   TargetFolder Folder(&getDataLayout());

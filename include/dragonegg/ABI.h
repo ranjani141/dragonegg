@@ -142,7 +142,7 @@ getLLVMScalarTypeForStructReturn(tree_node *type, unsigned *Offset) {
   llvm::Type *Ty = ConvertType(type);
   uint64_t Size = getDataLayout().getTypeAllocSize(Ty);
   *Offset = 0;
-#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
   llvm::LLVMContext Context;
   if (Size == 0)
     return llvm::Type::getVoidTy(Context);

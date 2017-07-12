@@ -60,7 +60,7 @@ GCC_MINOR=$(word 2, $(subst ., ,$(GCC_VERSION)))
 GCC_MICRO=$(word 3, $(subst ., ,$(GCC_VERSION)))
 TARGET_TRIPLE=$(shell $(GCC) -dumpmachine)
 
-LLVM_VERSION=$(shell $(LLVM_CONFIG) --version)
+LLVM_VERSION_STRING=$(shell $(LLVM_CONFIG) --version)
 
 PLUGIN=dragonegg.so
 PLUGIN_OBJECTS=Aliasing.o Backend.o Cache.o ConstantConversion.o Convert.o \
@@ -77,7 +77,7 @@ ALL_OBJECTS=$(PLUGIN_OBJECTS) $(TARGET_OBJECT) $(TARGET_UTIL_OBJECTS)
 CPP_OPTIONS+=$(CPPFLAGS) $(shell $(LLVM_CONFIG) --cppflags) \
 	     -fno-rtti \
 	     -MD -MP \
-	     -DIN_GCC -DLLVM_VERSION=\"$(LLVM_VERSION)\" \
+	     -DIN_GCC -DLLVM_VERSION_STRING=\"$(LLVM_VERSION_STRING)\" \
 	     -DTARGET_TRIPLE=\"$(TARGET_TRIPLE)\" \
 	     -DGCC_MAJOR=$(GCC_MAJOR) -DGCC_MINOR=$(GCC_MINOR) \
 	     -DGCC_MICRO=$(GCC_MICRO) \

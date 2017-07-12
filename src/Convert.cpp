@@ -57,7 +57,7 @@ extern "C" {
 #include "diagnostic.h"
 #include "except.h"
 #include "flags.h"
-#if (GCC_MINOR > 6)
+#if (GCC_MAJOR < 5 && GCC_MINOR > 6)
 #include "gimple-pretty-print.h"
 #endif
 #include "langhooks.h"
@@ -67,7 +67,7 @@ extern "C" {
 #include "target.h" // For targetm.
 #include "tm_p.h"
 #include "toplev.h"
-#if GCC_MAJOR < 6
+#if (GCC_MAJOR < 6)
 #include "tree-flow.h"
 #else
 #include "builtins.h"
@@ -80,10 +80,11 @@ extern "C" {
 #include "tree-cfg.h"
 #include "gimple-iterator.h"
 #include "gimple-pretty-print.h"
+#include "tree-eh.h"
 #endif
 #include "tree-pass.h"
 
-#if GCC_MAJOR > 5
+#if (GCC_MAJOR > 5)
 #define ENTRY_BLOCK_PTR         (cfun->cfg->x_entry_block_ptr)
 #define FOR_EACH_BB(BB) FOR_EACH_BB_FN (BB, cfun)
 #endif
@@ -115,7 +116,7 @@ extern void debug_gimple_stmt(union gimple_statement_d *);
 // Trees header.
 #include "dragonegg/Trees.h"
 
-#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
 static LLVMContext Context;
 #else
 static LLVMContext &Context = getGlobalContext();
@@ -195,7 +196,7 @@ DisplaceLocationByUnits(MemRef Loc, int32_t Offset, LLVMBuilder &Builder) {
   Type *UnitPtrTy = GetUnitPointerType(Context, AddrSpace);
   Value *Ptr = Builder.CreateBitCast(Loc.Ptr, UnitPtrTy);
   Ptr = Builder.CreateConstInBoundsGEP1_32(
-#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
                                            UnitPtrTy,
 #endif
                                            Ptr, Offset,
@@ -597,7 +598,7 @@ static void StoreRegisterToMemory(Value *V, MemRef Loc, tree type,
 TreeToLLVM *TheTreeToLLVM = 0;
 
 const DataLayout &getDataLayout() {
-#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
   return TheTarget->createDataLayout();
 #else
   return *TheTarget->getSubtargetImpl()->getDataLayout();
@@ -806,7 +807,7 @@ struct FunctionPrologArgumentConversion : public DefaultABIClient {
     if (TheDebugInfo && !DECL_IGNORED_P(FunctionDecl)) {
       // https://reviews.llvm.org/rL243774
       TheDebugInfo->EmitDeclare(ResultDecl,
-#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
                                 dwarf::DW_TAG_invalid,
 #else
                                 dwarf::DW_TAG_auto_variable,
@@ -902,7 +903,7 @@ struct FunctionPrologArgumentConversion : public DefaultABIClient {
     Loc = Builder.CreateBitCast(Loc, StructTy->getPointerTo());
 
     Loc = Builder.CreateStructGEP(
-#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
                                   StructTy,
 #endif
                                   Loc, FieldNo, flag_verbose_asm ? "ntr" : "");
@@ -1030,7 +1031,7 @@ void TreeToLLVM::StartFunctionBody() {
 #endif /* TARGET_ADJUST_LLVM_LINKAGE */
 
   Fn->setUnnamedAddr(!TREE_ADDRESSABLE(FnDecl)
-#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
                      ? llvm::GlobalValue::UnnamedAddr::Global
                      : llvm::GlobalValue::UnnamedAddr::Local
 #endif
@@ -1052,7 +1053,7 @@ void TreeToLLVM::StartFunctionBody() {
   // Handle functions in specified sections.
   if (DECL_SECTION_NAME(FnDecl))
     Fn->setSection(
-#if GCC_MAJOR > 5
+#if (GCC_MAJOR > 5)
             StringRef(DECL_SECTION_NAME(FnDecl))
 #else
             TREE_STRING_POINTER(DECL_SECTION_NAME(FnDecl))
@@ -1169,7 +1170,7 @@ void TreeToLLVM::StartFunctionBody() {
       SET_DECL_LOCAL(Args, llvm::dyn_cast<llvm::Value>(AI));
       if (!isInvRef && EmitDebugInfo())
         TheDebugInfo->EmitDeclare(Args,
-#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
                                   dwarf::DW_TAG_invalid,
 #else
                                   dwarf::DW_TAG_arg_variable,
@@ -1186,7 +1187,7 @@ void TreeToLLVM::StartFunctionBody() {
       SET_DECL_LOCAL(Args, Tmp);
       if (EmitDebugInfo()) {
         TheDebugInfo->EmitDeclare(Args,
-#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
                                   dwarf::DW_TAG_invalid,
 #else
                                   dwarf::DW_TAG_arg_variable,
@@ -1283,28 +1284,28 @@ void TreeToLLVM::PopulatePhiNodes() {
     PhiRecord &P = PendingPhis[Idx];
 
     // Extract the incoming value for each predecessor from the GCC phi node.
-#if GCC_MAJOR > 5
-    for (unsigned i = 0, e = gimple_phi_num_args((const gimple *) P.gcc_phi); i != e; ++i) {
-#else
-    for (unsigned i = 0, e = gimple_phi_num_args(P.gcc_phi); i != e; ++i) {
+    for (unsigned i = 0, e = gimple_phi_num_args(
+#if (GCC_MAJOR > 5)
+                (const gimple *)
 #endif
+                P.gcc_phi); i != e; ++i) {
       // The incoming GCC basic block.
-#if GCC_MAJOR > 5
-      basic_block bb = gimple_phi_arg_edge((gphi *) P.gcc_phi, i)->src;
-#else
-      basic_block bb = gimple_phi_arg_edge(P.gcc_phi, i)->src;
+      basic_block bb = gimple_phi_arg_edge(
+#if (GCC_MAJOR > 5)
+              (gphi *)
 #endif
+              P.gcc_phi, i)->src;
 
       // The corresponding LLVM basic block.
       DenseMap<basic_block, BasicBlock *>::iterator BI = BasicBlocks.find(bb);
       assert(BI != BasicBlocks.end() && "GCC basic block not output?");
 
       // The incoming GCC expression.
-#if GCC_MAJOR > 5
-      tree val = gimple_phi_arg((gimple *) P.gcc_phi, i)->def;
-#else
-      tree val = gimple_phi_arg(P.gcc_phi, i)->def;
+      tree val = gimple_phi_arg(
+#if (GCC_MAJOR > 5)
+              (gimple *)
 #endif
+              P.gcc_phi, i)->def;
 
       // Associate it with the LLVM basic block.
       IncomingValues.push_back(std::make_pair(BI->second, val));
@@ -1319,7 +1320,7 @@ void TreeToLLVM::PopulatePhiNodes() {
         assert(FI->getSinglePredecessor() == IncomingValues.back().first &&
                "Anonymous block does not continue predecessor!");
         IncomingValues.push_back(std::make_pair(
-#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
                     llvm::dyn_cast<llvm::BasicBlock>(FI),
 #else
                     FI,
@@ -1334,11 +1335,11 @@ void TreeToLLVM::PopulatePhiNodes() {
     // Get the LLVM predecessors for the basic block containing the phi node,
     // and remember their positions in the list of predecessors (this is used
     // to avoid adding phi operands in a non-deterministic order).
-#if GCC_MAJOR > 5
-    Predecessors.reserve(gimple_phi_num_args((const gimple *) P.gcc_phi)); // At least this many.
-#else
-    Predecessors.reserve(gimple_phi_num_args(P.gcc_phi));
+    Predecessors.reserve(gimple_phi_num_args(
+#if (GCC_MAJOR > 5)
+                (const gimple *)
 #endif
+                P.gcc_phi)); // At least this many.
     BasicBlock *PhiBB = P.PHI->getParent();
     unsigned Index = 0;
     for (pred_iterator PI = pred_begin(PhiBB), PE = pred_end(PhiBB); PI != PE;
@@ -1583,17 +1584,18 @@ BasicBlock *TreeToLLVM::getBasicBlock(basic_block bb) {
   // use the same naming scheme as GCC.
   if (flag_verbose_asm) {
     // If BB contains labels, name the LLVM basic block after the first label.
-#if GCC_MAJOR > 5
-    gimple *stmt = first_stmt(bb);
+#if (GCC_MAJOR < 6)
+    gimple
 #else
-    gimple stmt = first_stmt(bb);
+    gimple *
 #endif
+        stmt = first_stmt(bb);
     if (stmt && gimple_code(stmt) == GIMPLE_LABEL) {
-#if GCC_MAJOR > 5
-      tree label = gimple_label_label(as_a<glabel *>(stmt));
-#else
-      tree label = gimple_label_label(stmt);
+      tree label = gimple_label_label(
+#if (GCC_MAJOR > 5)
+              as_a<glabel *>
 #endif
+              (stmt));
       const std::string &LabelName = getDescriptiveName(label);
       if (!LabelName.empty())
         BB->setName("<" + LabelName + ">");
@@ -1641,11 +1643,12 @@ void TreeToLLVM::EmitBasicBlock(basic_block bb) {
   // the phi uses may not have been defined yet - phis are special this way.
   for (gimple_stmt_iterator gsi = gsi_start_phis(bb); !gsi_end_p(gsi);
        gsi_next(&gsi)) {
-#if GCC_MAJOR > 5
-    gimple *gcc_phi = gsi_stmt(gsi);
+#if (GCC_MAJOR < 6)
+    gimple
 #else
-    gimple gcc_phi = gsi_stmt(gsi);
+    gimple *
 #endif
+        gcc_phi = gsi_stmt(gsi);
     // Skip virtual operands.
     if (!is_gimple_reg(gimple_phi_result(gcc_phi)))
       continue;
@@ -1669,11 +1672,12 @@ void TreeToLLVM::EmitBasicBlock(basic_block bb) {
   // Render statements.
   for (gimple_stmt_iterator gsi = gsi_start_bb(bb); !gsi_end_p(gsi);
        gsi_next(&gsi)) {
-#if GCC_MAJOR > 5
-    gimple *stmt = gsi_stmt(gsi);
+#if (GCC_MAJOR < 6)
+    gimple
 #else
-    gimple stmt = gsi_stmt(gsi);
+    gimple *
 #endif
+        stmt = gsi_stmt(gsi);
     input_location = gimple_location(stmt);
     ++NumStatements;
 
@@ -1771,7 +1775,7 @@ Function *TreeToLLVM::EmitFunction() {
     FMF.setAllowReciprocal();
   if (flag_unsafe_math_optimizations && flag_finite_math_only)
     FMF.setUnsafeAlgebra();
-#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
   Builder.setFastMathFlags(FMF);
 #else
   Builder.SetFastMathFlags(FMF);
@@ -1887,7 +1891,7 @@ LValue TreeToLLVM::EmitLV(tree exp) {
   case INDIRECT_REF:
     LV = EmitLV_INDIRECT_REF(exp);
     break;
-#if (GCC_MAJOR < 6 && GCC_MINOR < 6)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 6)
   case MISALIGNED_INDIRECT_REF:
     LV = EmitLV_MISALIGNED_INDIRECT_REF(exp);
     break;
@@ -2215,12 +2219,12 @@ void TreeToLLVM::CopyElementByElement(MemRef DestLoc, MemRef SrcLoc,
       int FieldIdx = GetFieldIndex(Field, Ty);
       assert(FieldIdx != INT_MAX && "Should not be copying if no LLVM field!");
       Value *DestFieldPtr = Builder.CreateStructGEP(
-#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
           Ty,
 #endif
           DestLoc.Ptr, FieldIdx, flag_verbose_asm ? "df" : "");
       Value *SrcFieldPtr = Builder.CreateStructGEP(
-#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
           Ty,
 #endif
           SrcLoc.Ptr, FieldIdx, flag_verbose_asm ? "sf" : "");
@@ -2256,12 +2260,12 @@ void TreeToLLVM::CopyElementByElement(MemRef DestLoc, MemRef SrcLoc,
     Value *DestCompPtr = DestLoc.Ptr, *SrcCompPtr = SrcLoc.Ptr;
     if (i) {
       DestCompPtr = Builder.CreateConstInBoundsGEP1_32(
-#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
           CompType,
 #endif
           DestCompPtr, i, flag_verbose_asm ? "da" : "");
       SrcCompPtr = Builder.CreateConstInBoundsGEP1_32(
-#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
           CompType,
 #endif
           SrcCompPtr, i, flag_verbose_asm ? "sa" : "");
@@ -2330,7 +2334,7 @@ void TreeToLLVM::ZeroElementByElement(MemRef DestLoc, tree type) {
       int FieldIdx = GetFieldIndex(Field, Ty);
       assert(FieldIdx != INT_MAX && "Should not be zeroing if no LLVM field!");
       Value *FieldPtr = Builder.CreateStructGEP(
-#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
                                                 Ty,
 #endif
                                                 DestLoc.Ptr, FieldIdx,
@@ -2362,7 +2366,7 @@ void TreeToLLVM::ZeroElementByElement(MemRef DestLoc, tree type) {
     Value *CompPtr = DestLoc.Ptr;
     if (i)
       CompPtr = Builder.CreateConstInBoundsGEP1_32(
-#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
           CompType,
 #endif
           CompPtr, i, flag_verbose_asm ? "za" : "");
@@ -2579,7 +2583,7 @@ void TreeToLLVM::EmitAutomaticVariableDecl(tree decl) {
   if (EmitDebugInfo()) {
     if (DECL_NAME(decl) || isa<RESULT_DECL>(decl)) {
       TheDebugInfo->EmitDeclare(decl,
-#if (LLVM_VERSION_MAJOR >= 3 && LLVM_VERSION_MINOR > 8) || LLVM_VERSION_MAJOR > 3
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
                                 dwarf::DW_TAG_invalid,
 #else
                                 dwarf::DW_TAG_auto_variable,
@@ -2756,7 +2760,12 @@ void TreeToLLVM::EmitLandingPads() {
     unsigned RegionNo = region->index;
 
     // Insert instructions at the start of the landing pad, but after any phis.
-    Builder.SetInsertPoint(LPad, LPad->getFirstNonPHI());
+    // https://reviews.llvm.org/rL249925
+    Builder.SetInsertPoint(
+#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
+                           LPad,
+#endif
+                           LPad->getFirstNonPHI());
 
     // Create the landingpad instruction without any clauses.  Clauses are added
     // below.
@@ -2766,8 +2775,13 @@ void TreeToLLVM::EmitLandingPads() {
              "No exception handling personality!");
       personality = lang_hooks.eh_personality();
     }
+    // https://reviews.llvm.org/D10429
     LandingPadInst *LPadInst = Builder.CreateLandingPad(
-        UnwindDataTy, DECL_LLVM(personality), 0, "exc");
+        UnwindDataTy,
+#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
+        DECL_LLVM(personality),
+#endif
+        0, "exc");
 
     // Store the exception pointer if made use of elsewhere.
     if (RegionNo < ExceptionPtrs.size() && ExceptionPtrs[RegionNo]) {
@@ -2894,8 +2908,13 @@ void TreeToLLVM::EmitFailureBlocks() {
           StructType::get(Builder.getInt8PtrTy(), Builder.getInt32Ty(), NULL);
       tree personality = DECL_FUNCTION_PERSONALITY(FnDecl);
       assert(personality && "No-throw region but no personality function!");
+      // https://reviews.llvm.org/D10429
       LandingPadInst *LPadInst = Builder.CreateLandingPad(
-          UnwindDataTy, DECL_LLVM(personality), 1, "exc");
+          UnwindDataTy,
+#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
+          DECL_LLVM(personality),
+#endif
+          1, "exc");
       ArrayType *FilterTy = ArrayType::get(Builder.getInt8PtrTy(), 0);
       LPadInst->addClause(ConstantArray::get(FilterTy, ArrayRef<Constant *>()));
 
@@ -2983,7 +3002,11 @@ Value *TreeToLLVM::EmitLoadOfLValue(tree exp) {
 
   // Load the minimum number of bytes that covers the field.
   unsigned LoadSizeInBits = LV.BitStart + LV.BitSize;
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+  LoadSizeInBits = alignTo(LoadSizeInBits, BITS_PER_UNIT);
+#else
   LoadSizeInBits = RoundUpToAlignment(LoadSizeInBits, BITS_PER_UNIT);
+#endif
   Type *LoadType = IntegerType::get(Context, LoadSizeInBits);
 
   // Load the bits.
@@ -3056,7 +3079,7 @@ Value *TreeToLLVM::EmitOBJ_TYPE_REF(tree exp) {
                                getRegType(TREE_TYPE(exp)));
 }
 
-#if (GCC_MINOR < 8)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 8)
 INSTANTIATE_VECTOR(constructor_elt);
 #endif
 
@@ -3395,7 +3418,11 @@ struct FunctionCallArgumentConversion : public DefaultABIClient {
     Value *Loc = getAddress();
     Loc = Builder.CreateBitCast(Loc, StructTy->getPointerTo());
     pushAddress(
-        Builder.CreateStructGEP(Loc, FieldNo, flag_verbose_asm ? "elt" : ""));
+        Builder.CreateStructGEP(
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+                                StructTy,
+#endif
+                                Loc, FieldNo, flag_verbose_asm ? "elt" : ""));
   }
   void ExitField() {
     assert(!LocStack.empty());
@@ -3407,8 +3434,8 @@ struct FunctionCallArgumentConversion : public DefaultABIClient {
 /// EmitCallOf - Emit a call to the specified callee with the operands specified
 /// in the GIMPLE_CALL 'stmt'. If the result of the call is a scalar, return the
 /// result, otherwise store it in DestLoc.
-Value *TreeToLLVM::EmitCallOf(Value *Callee, gimple stmt, const MemRef *DestLoc,
-                              const AttributeSet &InPAL) {
+Value *TreeToLLVM::EmitCallOf(Value *Callee, gimple_statement_d *stmt,
+                              const MemRef *DestLoc, const AttributeSet &InPAL) {
   BasicBlock *LandingPad = 0; // Non-zero indicates an invoke.
   int LPadNo = 0;
 
@@ -3417,7 +3444,7 @@ Value *TreeToLLVM::EmitCallOf(Value *Callee, gimple stmt, const MemRef *DestLoc,
     PAL = cast<Function>(Callee)->getAttributes();
 
   // Work out whether to use an invoke or an ordinary call.
-  if (!stmt_could_throw_p(stmt))
+  if (!stmt_could_throw_p((gimple *) stmt))
     // This call does not throw - mark it 'nounwind'.
     PAL = PAL.addAttribute(Callee->getContext(), AttributeSet::FunctionIndex,
                            Attribute::NoUnwind);
@@ -3425,7 +3452,7 @@ Value *TreeToLLVM::EmitCallOf(Value *Callee, gimple stmt, const MemRef *DestLoc,
   if (!PAL.hasAttribute(AttributeSet::FunctionIndex, Attribute::NoUnwind)) {
     // This call may throw.  Determine if we need to generate
     // an invoke rather than a simple call.
-    LPadNo = lookup_stmt_eh_lp(stmt);
+    LPadNo = lookup_stmt_eh_lp((gimple *) stmt);
 
     if (LPadNo > 0) {
       // The call is in an exception handling region with a landing pad.
@@ -3447,12 +3474,12 @@ Value *TreeToLLVM::EmitCallOf(Value *Callee, gimple stmt, const MemRef *DestLoc,
     }
   }
 
-  tree fndecl = gimple_call_fndecl(stmt);
-#if (GCC_MINOR < 7)
+  tree fndecl = gimple_call_fndecl((gimple *) stmt);
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
   tree fntype =
       fndecl ? TREE_TYPE(fndecl) : TREE_TYPE(TREE_TYPE(gimple_call_fn(stmt)));
 #else
-  tree fntype = gimple_call_fntype(stmt);
+  tree fntype = gimple_call_fntype((gimple *) stmt);
 #endif
 
   // Determine the calling convention.
@@ -3465,23 +3492,45 @@ Value *TreeToLLVM::EmitCallOf(Value *Callee, gimple stmt, const MemRef *DestLoc,
   PointerType *PFTy = cast<PointerType>(Callee->getType());
   FunctionType *FTy = cast<FunctionType>(PFTy->getElementType());
   FunctionCallArgumentConversion Client(CallOperands, FTy, DestLoc,
-                                        gimple_call_return_slot_opt_p(stmt),
+                                        gimple_call_return_slot_opt_p(
+#if (GCC_MAJOR > 5)
+                                            (gcall *)
+#endif
+                                            stmt),
                                         Builder, CallingConvention);
   DefaultABI ABIConverter(Client);
 
   // Handle the result, including struct returns.
-  ABIConverter.HandleReturnType(gimple_call_return_type(stmt),
+  ABIConverter.HandleReturnType(
+                                gimple_call_return_type(
+#if (GCC_MAJOR > 5)
+                                    (gcall *)
+#endif
+                                    stmt),
                                 fndecl ? fndecl : fntype,
                                 fndecl ? DECL_BUILT_IN(fndecl) : false);
 
   // Pass the static chain, if any, as the first parameter.
+#if (GCC_MAJOR < 6)
   if (gimple_call_chain(stmt))
     CallOperands.push_back(EmitMemory(gimple_call_chain(stmt)));
+#else
+  if (gimple_call_chain((gcall *) stmt))
+    CallOperands.push_back(EmitMemory(gimple_call_chain((gcall *) stmt)));
+#endif
 
   // Loop over the arguments, expanding them and adding them to the op list.
   std::vector<Type *> ScalarArgs;
-  for (unsigned i = 0, e = gimple_call_num_args(stmt); i != e; ++i) {
-    tree arg = gimple_call_arg(stmt, i);
+  for (unsigned i = 0, e = gimple_call_num_args(
+#if (GCC_MAJOR > 5)
+              (gcall *)
+#endif
+              stmt); i != e; ++i) {
+    tree arg = gimple_call_arg(
+#if (GCC_MAJOR > 5)
+            (gcall *)
+#endif
+            stmt, i);
     tree type = TREE_TYPE(arg);
     Type *ArgTy = ConvertType(type);
 
@@ -3577,11 +3626,19 @@ Value *TreeToLLVM::EmitCallOf(Value *Callee, gimple stmt, const MemRef *DestLoc,
 
   // If the call statement has void type then either the callee does not return
   // a result, or it does but the result should be discarded.
-  if (isa<VOID_TYPE>(gimple_call_return_type(stmt)))
+  if (isa<VOID_TYPE>(gimple_call_return_type(
+#if (GCC_MAJOR > 5)
+                  (gcall *)
+#endif
+                  stmt)))
     return 0;
 
   if (Client.isShadowReturn())
-    return Client.EmitShadowResult(gimple_call_return_type(stmt), DestLoc);
+    return Client.EmitShadowResult(gimple_call_return_type(
+#if (GCC_MAJOR > 5)
+                (gcall *)
+#endif
+                stmt), DestLoc);
 
   if (Client.isAggrReturn()) {
     MemRef Target;
@@ -3590,7 +3647,11 @@ Value *TreeToLLVM::EmitCallOf(Value *Callee, gimple stmt, const MemRef *DestLoc,
     else
       // Destination is a first class value (eg: a complex number).  Extract to
       // a temporary then load the value out later.
-      Target = CreateTempLoc(ConvertType(gimple_call_return_type(stmt)));
+      Target = CreateTempLoc(ConvertType(gimple_call_return_type(
+#if (GCC_MAJOR > 5)
+                      (gcall *)
+#endif
+                      stmt)));
 
     if (DL.getTypeAllocSize(Call->getType()) <=
         DL.getTypeAllocSize(cast<PointerType>(Target.Ptr->getType())
@@ -3612,14 +3673,22 @@ Value *TreeToLLVM::EmitCallOf(Value *Callee, gimple stmt, const MemRef *DestLoc,
           Target, MemRef(Builder.CreateBitCast(biggerTmp,
                                                Call->getType()->getPointerTo()),
                          Target.getAlignment(), Target.Volatile),
-          gimple_call_return_type(stmt));
+          gimple_call_return_type(
+#if (GCC_MAJOR > 5)
+              (gcall *)
+#endif
+              stmt));
     }
 
     return DestLoc ? 0 : Builder.CreateLoad(Target.Ptr);
   }
 
   if (!DestLoc) {
-    Type *RetTy = ConvertType(gimple_call_return_type(stmt));
+    Type *RetTy = ConvertType(gimple_call_return_type(
+#if (GCC_MAJOR > 5)
+                (gcall *)
+#endif
+                stmt));
     if (Call->getType() == RetTy)
       return Call; // Normal scalar return.
 
@@ -3826,12 +3895,21 @@ void TreeToLLVM::EmitModifyOfRegisterVariable(tree decl, Value *RHS) {
 /// Other %xN expressions are turned into LLVM ${N:x} operands.
 ///
 static std::string ConvertInlineAsmStr(gimple stmt, unsigned NumOperands) {
-  const char *AsmStr = gimple_asm_string(stmt);
+  const char *AsmStr = 
+#if (GCC_MAJOR < 6)
+      gimple_asm_string(stmt);
+#else
+      gimple_asm_string(as_a<gasm *>(&stmt));
+#endif
 
   // gimple_asm_input_p - This flag is set if this is a non-extended ASM,
   // which means that the asm string should not be interpreted, other than
   // to escape $'s.
+#if (GCC_MAJOR < 6)
   if (gimple_asm_input_p(stmt)) {
+#else
+  if (gimple_asm_input_p(as_a<gasm *>(&stmt))) {
+#endif
     const char *InStr = AsmStr;
     std::string Result;
     while (1) {
@@ -3925,10 +4003,20 @@ static std::string ConvertInlineAsmStr(gimple stmt, unsigned NumOperands) {
 static bool isOperandMentioned(gimple stmt, unsigned OpNum) {
   // If this is a non-extended ASM then the contents of the asm string are not
   // to be interpreted.
+#if (GCC_MAJOR < 6)
   if (gimple_asm_input_p(stmt))
+#else
+  if (gimple_asm_input_p(as_a<gasm *>(&stmt)))
+#endif
     return false;
   // Search for a non-escaped '%' character followed by OpNum.
-  for (const char *AsmStr = gimple_asm_string(stmt); * AsmStr; ++AsmStr) {
+  for (const char *AsmStr =
+#if (GCC_MAJOR < 6)
+          gimple_asm_string(stmt);
+#else
+          gimple_asm_string(as_a<gasm *>(&stmt));
+#endif
+          * AsmStr; ++AsmStr) {
     if (*AsmStr != '%')
       // Not a '%', move on to next character.
       continue;
@@ -4012,10 +4100,11 @@ static std::string CanonicalizeConstraint(const char *Constraint) {
       // REG_CLASS_FROM_CONSTRAINT doesn't support 'r' for some reason.
       RegClass = GENERAL_REGS;
     else
-#if GCC_MAJOR > 5
-      RegClass = reg_class_for_constraint(lookup_constraint(Constraint - 1));
+      RegClass =
+#if (GCC_MAJOR > 5)
+        reg_class_for_constraint(lookup_constraint(Constraint - 1));
 #else
-      RegClass = REG_CLASS_FROM_CONSTRAINT(Constraint[-1], Constraint - 1);
+        REG_CLASS_FROM_CONSTRAINT(Constraint[-1], Constraint - 1);
 #endif
 
     if (RegClass == NO_REGS) { // not a reg class.
@@ -4081,10 +4170,11 @@ static int MatchWeight(const char *Constraint, tree Operand) {
         if (*p == 'r')
           RegClass = GENERAL_REGS;
         else
-#if GCC_MAJOR > 5
-          RegClass = reg_class_for_constraint(lookup_constraint(p));
+          RegClass =
+#if (GCC_MAJOR > 5)
+            reg_class_for_constraint(lookup_constraint(p));
 #else
-          RegClass = REG_CLASS_FROM_CONSTRAINT(*p, p);
+            REG_CLASS_FROM_CONSTRAINT(*p, p);
 #endif
         if (RegClass != NO_REGS &&
             TEST_HARD_REG_BIT(reg_class_contents[RegClass], RegNum)) {
@@ -4132,8 +4222,13 @@ static int MatchWeight(const char *Constraint, tree Operand) {
 static void ChooseConstraintTuple(gimple stmt, const char **Constraints,
                                   unsigned NumChoices,
                                   BumpPtrAllocator &StringStorage) {
+#if (GCC_MAJOR < 6)
   unsigned NumInputs = gimple_asm_ninputs(stmt);
   unsigned NumOutputs = gimple_asm_noutputs(stmt);
+#else
+  unsigned NumInputs = gimple_asm_ninputs(as_a<gasm *>(&stmt));
+  unsigned NumOutputs = gimple_asm_noutputs(as_a<gasm *>(&stmt));
+#endif
 
   int MaxWeight = -1;
   unsigned int CommasToSkip = 0;
@@ -4149,7 +4244,12 @@ static void ChooseConstraintTuple(gimple stmt, const char **Constraints,
   for (unsigned i = 0; i != NumChoices; ++i) {
     Weights[i] = 0;
     for (unsigned j = 0; j != NumOutputs; ++j) {
-      tree Output = gimple_asm_output_op(stmt, j);
+      tree Output =
+#if (GCC_MAJOR < 6)
+          gimple_asm_output_op(stmt, j);
+#else
+          gimple_asm_output_op(as_a<gasm *>(&stmt), j);
+#endif
       if (i == 0)
         RunningConstraints[j]++; // skip leading =
       const char *p = RunningConstraints[j];
@@ -4175,7 +4275,12 @@ static void ChooseConstraintTuple(gimple stmt, const char **Constraints,
       RunningConstraints[j] = p;
     }
     for (unsigned j = 0; j != NumInputs; ++j) {
-      tree Input = gimple_asm_input_op(stmt, j);
+      tree Input =
+#if (GCC_MAJOR < 6)
+          gimple_asm_input_op(stmt, j);
+#else
+          gimple_asm_input_op(as_a<gasm *>(&stmt), j);
+#endif
       const char *p = RunningConstraints[NumOutputs + j];
       if (Weights[i] != -1) {
         int w = MatchWeight(p, TREE_VALUE(Input));
@@ -4315,14 +4420,24 @@ Value *TreeToLLVM::BuildVectorShuffle(Value *InVec1, Value *InVec2, ...) {
 ///
 /// This method returns true if the builtin is handled, otherwise false.
 ///
-bool TreeToLLVM::EmitFrontendExpandedBuiltinCall(
-    gimple stmt, tree fndecl, const MemRef *DestLoc, Value *&Result) {
+bool TreeToLLVM::EmitFrontendExpandedBuiltinCall(gimple_statement_d *stmt,
+                                                 tree fndecl,
+                                                 const MemRef *DestLoc,
+                                                 Value *&Result) {
 #ifdef LLVM_TARGET_INTRINSIC_LOWER
   // Get the result type and operand line in an easy to consume format.
   Type *ResultType = ConvertType(TREE_TYPE(TREE_TYPE(fndecl)));
   std::vector<Value *> Operands;
-  for (unsigned i = 0, e = gimple_call_num_args(stmt); i != e; ++i) {
-    tree OpVal = gimple_call_arg(stmt, i);
+  for (unsigned i = 0, e = gimple_call_num_args(
+#if (GCC_MAJOR > 5)
+              (gcall *)
+#endif
+              stmt); i != e; ++i) {
+    tree OpVal = gimple_call_arg(
+#if (GCC_MAJOR > 5)
+            (gcall *)
+#endif
+            stmt, i);
     if (isa<AGGREGATE_TYPE>(TREE_TYPE(OpVal))) {
       MemRef OpLoc = CreateTempLoc(ConvertType(TREE_TYPE(OpVal)));
       EmitAggregate(OpVal, OpLoc);
@@ -4348,12 +4463,24 @@ bool TreeToLLVM::EmitFrontendExpandedBuiltinCall(
 /// builtin number.
 static std::vector<Constant *> TargetBuiltinCache;
 
-Value *TreeToLLVM::BuildBinaryAtomic(gimple stmt, AtomicRMWInst::BinOp Kind,
+Value *TreeToLLVM::BuildBinaryAtomic(gimple_statement_d *stmt,
+                                     AtomicRMWInst::BinOp Kind,
                                      unsigned PostOp) {
-  tree return_type = gimple_call_return_type(stmt);
+  tree return_type = gimple_call_return_type(
+#if (GCC_MAJOR > 5)
+          (gcall *)
+#endif
+          stmt);
   Type *ResultTy = ConvertType(return_type);
-  Value *C[2] = { EmitMemory(gimple_call_arg(stmt, 0)),
-                  EmitMemory(gimple_call_arg(stmt, 1)) };
+  Value *C[2] = {
+#if (GCC_MAJOR < 6)
+                  EmitMemory(gimple_call_arg(stmt, 0)),
+                  EmitMemory(gimple_call_arg(stmt, 1))
+#else
+                  EmitMemory(gimple_call_arg((gcall *) stmt, 0)),
+                  EmitMemory(gimple_call_arg((gcall *) stmt, 1))
+#endif
+                };
   Type *Ty[2];
   Ty[0] = ResultTy;
   Ty[1] = ResultTy->getPointerTo();
@@ -4361,7 +4488,7 @@ Value *TreeToLLVM::BuildBinaryAtomic(gimple stmt, AtomicRMWInst::BinOp Kind,
   C[1] = Builder.CreateIntCast(
       C[1], Ty[0], /*isSigned*/ !TYPE_UNSIGNED(return_type), "cast");
   Value *Result =
-      Builder.CreateAtomicRMW(Kind, C[0], C[1], SequentiallyConsistent);
+      Builder.CreateAtomicRMW(Kind, C[0], C[1], AtomicOrdering::SequentiallyConsistent);
   if (PostOp)
     Result = Builder.CreateBinOp(Instruction::BinaryOps(PostOp), Result, C[1]);
 
@@ -4370,10 +4497,17 @@ Value *TreeToLLVM::BuildBinaryAtomic(gimple stmt, AtomicRMWInst::BinOp Kind,
 }
 
 Value *
-TreeToLLVM::BuildCmpAndSwapAtomic(gimple stmt, unsigned Bits, bool isBool) {
+TreeToLLVM::BuildCmpAndSwapAtomic(gimple_statement_d *stmt, unsigned Bits,
+                                  bool isBool) {
+#if (GCC_MAJOR < 6)
   tree ptr = gimple_call_arg(stmt, 0);
   tree old_val = gimple_call_arg(stmt, 1);
   tree new_val = gimple_call_arg(stmt, 2);
+#else
+  tree ptr = gimple_call_arg((gcall *) stmt, 0);
+  tree old_val = gimple_call_arg((gcall *) stmt, 1);
+  tree new_val = gimple_call_arg((gcall *) stmt, 2);
+#endif
 
   // The type loaded from/stored to memory.
   Type *MemTy = IntegerType::get(Context, Bits);
@@ -4390,15 +4524,19 @@ TreeToLLVM::BuildCmpAndSwapAtomic(gimple stmt, unsigned Bits, bool isBool) {
   Value *C[3] = { Ptr, Old_Val, New_Val };
   Value *Result =
       Builder.CreateAtomicCmpXchg(C[0], C[1], C[2],
-                                  SequentiallyConsistent,
-                                  SequentiallyConsistent);
+                                  AtomicOrdering::SequentiallyConsistent,
+                                  AtomicOrdering::SequentiallyConsistent);
 
   // AtomicCmpXchg has the type {i1,iN}.
   Result = Builder.CreateExtractValue(Result, 0);
 
   if (isBool)
     Result = Builder.CreateICmpEQ(Result, Old_Val);
-  tree return_type = gimple_call_return_type(stmt);
+  tree return_type = gimple_call_return_type(
+#if (GCC_MAJOR > 5)
+          (gcall *)
+#endif
+          stmt);
   Result = CastToAnyType(Result, !TYPE_UNSIGNED(return_type),
                          getRegType(return_type), !TYPE_UNSIGNED(return_type));
   return Reg2Mem(Result, return_type, Builder);
@@ -4407,7 +4545,7 @@ TreeToLLVM::BuildCmpAndSwapAtomic(gimple stmt, unsigned Bits, bool isBool) {
 /// EmitBuiltinCall - stmt is a call to fndecl, a builtin function.  Try to emit
 /// the call in a special way, setting Result to the scalar result if necessary.
 /// If we can't handle the builtin, return false, otherwise return true.
-bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
+bool TreeToLLVM::EmitBuiltinCall(gimple_statement_d *stmt, tree fndecl,
                                  const MemRef *DestLoc, Value *&Result) {
   if (DECL_BUILT_IN_CLASS(fndecl) == BUILT_IN_MD) {
     unsigned FnCode = DECL_FUNCTION_CODE(fndecl);
@@ -4432,7 +4570,11 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
           Intrinsic::getIntrinsicForGCCBuiltin(TargetPrefix, BuiltinName);
       if (IntrinsicID == Intrinsic::not_intrinsic) {
         error("unsupported target builtin %<%s%> used", BuiltinName);
-        Type *ResTy = ConvertType(gimple_call_return_type(stmt));
+        Type *ResTy = ConvertType(gimple_call_return_type(
+#if (GCC_MAJOR > 5)
+                    (gcall *)
+#endif
+                    stmt));
         if (ResTy->isSingleValueType())
           Result = UndefValue::get(ResTy);
         return true;
@@ -4542,11 +4684,19 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
     return EmitBuiltinUnwindInit(stmt, Result);
 
   case BUILT_IN_OBJECT_SIZE: {
-    if (!validate_gimple_arglist(stmt, POINTER_TYPE, INTEGER_TYPE, VOID_TYPE)) {
+    if (!validate_gimple_arglist(
+#if (GCC_MAJOR > 5)
+                (gcall *)
+#endif
+                stmt, POINTER_TYPE, INTEGER_TYPE, VOID_TYPE)) {
       error("Invalid builtin_object_size argument types");
       return false;
     }
-    tree ObjSizeTree = gimple_call_arg(stmt, 1);
+    tree ObjSizeTree = gimple_call_arg(
+#if (GCC_MAJOR > 5)
+            (gcall *)
+#endif
+            stmt, 1);
     STRIP_NOPS(ObjSizeTree);
     if (!isa<INTEGER_CST>(ObjSizeTree) || tree_int_cst_sgn(ObjSizeTree) < 0 ||
         compare_tree_int(ObjSizeTree, 3) > 0) {
@@ -4555,7 +4705,11 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
     }
 
     // LLVM doesn't handle type 1 or type 3. Deal with that here.
-    Value *Tmp = EmitMemory(gimple_call_arg(stmt, 1));
+    Value *Tmp = EmitMemory(gimple_call_arg(
+#if (GCC_MAJOR > 5)
+                (gcall *)
+#endif
+                stmt, 1));
 
     ConstantInt *CI = cast<ConstantInt>(Tmp);
 
@@ -4565,12 +4719,20 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
 
     Value *NewTy = ConstantInt::get(Tmp->getType(), val);
 
-    Value *Args[] = { EmitMemory(gimple_call_arg(stmt, 0)), NewTy };
+    Value *Args[] = { EmitMemory(gimple_call_arg(
+#if (GCC_MAJOR > 5)
+                (gcall *)
+#endif
+                stmt, 0)), NewTy };
     Type *Int8PtrTy = Type::getInt8PtrTy(Context);
 
     // Grab the current return type.
     Type *Ty[2] = {
-      ConvertType(gimple_call_return_type(stmt)),
+      ConvertType(gimple_call_return_type(
+#if (GCC_MAJOR > 5)
+                  (gcall *)
+#endif
+                  stmt)),
       Int8PtrTy
     };
 
@@ -4599,11 +4761,19 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
   case BUILT_IN_PARITYLL:
   case BUILT_IN_PARITYL:
   case BUILT_IN_PARITY: {
-    Value *Amt = EmitMemory(gimple_call_arg(stmt, 0));
+    Value *Amt = EmitMemory(gimple_call_arg(
+#if (GCC_MAJOR > 5)
+                (gcall *)
+#endif
+                stmt, 0));
     EmitBuiltinUnaryOp(Amt, Result, Intrinsic::ctpop);
     Result = Builder.CreateBinOp(Instruction::And, Result,
                                  ConstantInt::get(Result->getType(), 1));
-    tree return_type = gimple_call_return_type(stmt);
+    tree return_type = gimple_call_return_type(
+#if (GCC_MAJOR > 5)
+            (gcall *)
+#endif
+            stmt);
     Type *DestTy = ConvertType(return_type);
     Result = Builder.CreateIntCast(
         Result, DestTy, /*isSigned*/ !TYPE_UNSIGNED(return_type), "cast");
@@ -4612,9 +4782,17 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
   case BUILT_IN_POPCOUNT: // These GCC builtins always return int.
   case BUILT_IN_POPCOUNTL:
   case BUILT_IN_POPCOUNTLL: {
-    Value *Amt = EmitMemory(gimple_call_arg(stmt, 0));
+    Value *Amt = EmitMemory(gimple_call_arg(
+#if (GCC_MAJOR > 5)
+                (gcall *)
+#endif
+                stmt, 0));
     EmitBuiltinUnaryOp(Amt, Result, Intrinsic::ctpop);
-    tree return_type = gimple_call_return_type(stmt);
+    tree return_type = gimple_call_return_type(
+#if (GCC_MAJOR > 5)
+            (gcall *)
+#endif
+            stmt);
     Type *DestTy = ConvertType(return_type);
     Result = Builder.CreateIntCast(
         Result, DestTy, /*isSigned*/ !TYPE_UNSIGNED(return_type), "cast");
@@ -4622,9 +4800,17 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
   }
   case BUILT_IN_BSWAP32:
   case BUILT_IN_BSWAP64: {
-    Value *Amt = EmitMemory(gimple_call_arg(stmt, 0));
+    Value *Amt = EmitMemory(gimple_call_arg(
+#if (GCC_MAJOR > 5)
+                (gcall *)
+#endif
+                stmt, 0));
     EmitBuiltinUnaryOp(Amt, Result, Intrinsic::bswap);
-    tree return_type = gimple_call_return_type(stmt);
+    tree return_type = gimple_call_return_type(
+#if (GCC_MAJOR > 5)
+            (gcall *)
+#endif
+            stmt);
     Type *DestTy = ConvertType(return_type);
     Result = Builder.CreateIntCast(
         Result, DestTy, /*isSigned*/ !TYPE_UNSIGNED(return_type), "cast");
@@ -4657,9 +4843,17 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
   case BUILT_IN_LOGL:
     // If errno math has been disabled, expand these to llvm.log calls.
     if (!flag_errno_math) {
-      Value *Amt = EmitMemory(gimple_call_arg(stmt, 0));
+      Value *Amt = EmitMemory(gimple_call_arg(
+#if (GCC_MAJOR > 5)
+                  (gcall *)
+#endif
+                  stmt, 0));
       EmitBuiltinUnaryOp(Amt, Result, Intrinsic::log);
-      Result = CastToFPType(Result, ConvertType(gimple_call_return_type(stmt)));
+      Result = CastToFPType(Result, ConvertType(gimple_call_return_type(
+#if (GCC_MAJOR > 5)
+                      (gcall *)
+#endif
+                      stmt)));
       return true;
     }
     break;
@@ -4668,9 +4862,17 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
   case BUILT_IN_LOG2L:
     // If errno math has been disabled, expand these to llvm.log2 calls.
     if (!flag_errno_math) {
-      Value *Amt = EmitMemory(gimple_call_arg(stmt, 0));
+      Value *Amt = EmitMemory(gimple_call_arg(
+#if (GCC_MAJOR > 5)
+                  (gcall *)
+#endif
+                  stmt, 0));
       EmitBuiltinUnaryOp(Amt, Result, Intrinsic::log2);
-      Result = CastToFPType(Result, ConvertType(gimple_call_return_type(stmt)));
+      Result = CastToFPType(Result, ConvertType(gimple_call_return_type(
+#if (GCC_MAJOR > 5)
+                      (gcall *)
+#endif
+                      stmt)));
       return true;
     }
     break;
@@ -4679,9 +4881,17 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
   case BUILT_IN_LOG10L:
     // If errno math has been disabled, expand these to llvm.log10 calls.
     if (!flag_errno_math) {
-      Value *Amt = EmitMemory(gimple_call_arg(stmt, 0));
+      Value *Amt = EmitMemory(gimple_call_arg(
+#if (GCC_MAJOR > 5)
+                  (gcall *)
+#endif
+                  stmt, 0));
       EmitBuiltinUnaryOp(Amt, Result, Intrinsic::log10);
-      Result = CastToFPType(Result, ConvertType(gimple_call_return_type(stmt)));
+      Result = CastToFPType(Result, ConvertType(gimple_call_return_type(
+#if (GCC_MAJOR > 5)
+                      (gcall *)
+#endif
+                      stmt)));
       return true;
     }
     break;
@@ -4690,9 +4900,17 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
   case BUILT_IN_EXPL:
     // If errno math has been disabled, expand these to llvm.exp calls.
     if (!flag_errno_math) {
-      Value *Amt = EmitMemory(gimple_call_arg(stmt, 0));
+      Value *Amt = EmitMemory(gimple_call_arg(
+#if (GCC_MAJOR > 5)
+                  (gcall *)
+#endif
+                  stmt, 0));
       EmitBuiltinUnaryOp(Amt, Result, Intrinsic::exp);
-      Result = CastToFPType(Result, ConvertType(gimple_call_return_type(stmt)));
+      Result = CastToFPType(Result, ConvertType(gimple_call_return_type(
+#if (GCC_MAJOR > 5)
+                      (gcall *)
+#endif
+                      stmt)));
       return true;
     }
     break;
@@ -4701,9 +4919,17 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
   case BUILT_IN_EXP2L:
     // If errno math has been disabled, expand these to llvm.exp2 calls.
     if (!flag_errno_math) {
-      Value *Amt = EmitMemory(gimple_call_arg(stmt, 0));
+      Value *Amt = EmitMemory(gimple_call_arg(
+#if (GCC_MAJOR > 5)
+                  (gcall *)
+#endif
+                  stmt, 0));
       EmitBuiltinUnaryOp(Amt, Result, Intrinsic::exp2);
-      Result = CastToFPType(Result, ConvertType(gimple_call_return_type(stmt)));
+      Result = CastToFPType(Result, ConvertType(gimple_call_return_type(
+#if (GCC_MAJOR > 5)
+                      (gcall *)
+#endif
+                      stmt)));
       return true;
     }
     break;
@@ -4712,13 +4938,29 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
   case BUILT_IN_FFSLL: { // FFS(X) -> (x == 0 ? 0 : CTTZ(x)+1)
     // The argument and return type of cttz should match the argument type of
     // the ffs, but should ignore the return type of ffs.
-    Value *Amt = EmitMemory(gimple_call_arg(stmt, 0));
-    Result = Builder.CreateCall2(
+    Value *Amt = EmitMemory(gimple_call_arg(
+#if (GCC_MAJOR > 5)
+                (gcall *)
+#endif
+                stmt, 0));
+    // https://reviews.llvm.org/rL237624
+    Result =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      Builder.CreateCall(
+        Intrinsic::getDeclaration(TheModule, Intrinsic::cttz, Amt->getType()),
+        {Amt, Builder.getTrue()});
+#else
+      Builder.CreateCall2(
         Intrinsic::getDeclaration(TheModule, Intrinsic::cttz, Amt->getType()),
         Amt, Builder.getTrue());
+#endif
     Result = Builder.CreateAdd(Result, ConstantInt::get(Result->getType(), 1));
     Result = Builder.CreateIntCast(
-        Result, ConvertType(gimple_call_return_type(stmt)), /*isSigned*/ false);
+        Result, ConvertType(gimple_call_return_type(
+#if (GCC_MAJOR > 5)
+                (gcall *)
+#endif
+                stmt)), /*isSigned*/ false);
     Value *Cond =
         Builder.CreateICmpEQ(Amt, Constant::getNullValue(Amt->getType()));
     Result = Builder.CreateSelect(
@@ -4816,13 +5058,19 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
 //TODO    return true;
 //TODO  }
 
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
   case BUILT_IN_SYNCHRONIZE:
 #else
   case BUILT_IN_SYNC_SYNCHRONIZE:
 #endif
     // We assume like gcc appears to, that this only applies to cached memory.
-    Builder.CreateFence(llvm::SequentiallyConsistent);
+    Builder.CreateFence(
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+            AtomicOrdering::SequentiallyConsistent
+#else
+            llvm::SequentiallyConsistent
+#endif
+            );
     return true;
 #if defined(TARGET_ALPHA) || defined(TARGET_386) || defined(TARGET_POWERPC) || \
     defined(TARGET_ARM)
@@ -4835,28 +5083,28 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
 // enough, we have to key off the opcode.
 // Note that Intrinsic::getDeclaration expects the type list in reversed
 // order, while CreateCall expects the parameter list in normal order.
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
   case BUILT_IN_BOOL_COMPARE_AND_SWAP_1:
 #else
   case BUILT_IN_SYNC_BOOL_COMPARE_AND_SWAP_1:
 #endif
     Result = BuildCmpAndSwapAtomic(stmt, BITS_PER_UNIT, true);
     return true;
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
   case BUILT_IN_BOOL_COMPARE_AND_SWAP_2:
 #else
   case BUILT_IN_SYNC_BOOL_COMPARE_AND_SWAP_2:
 #endif
     Result = BuildCmpAndSwapAtomic(stmt, 2 * BITS_PER_UNIT, true);
     return true;
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
   case BUILT_IN_BOOL_COMPARE_AND_SWAP_4:
 #else
   case BUILT_IN_SYNC_BOOL_COMPARE_AND_SWAP_4:
 #endif
     Result = BuildCmpAndSwapAtomic(stmt, 4 * BITS_PER_UNIT, true);
     return true;
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
   case BUILT_IN_BOOL_COMPARE_AND_SWAP_8:
 #else
   case BUILT_IN_SYNC_BOOL_COMPARE_AND_SWAP_8:
@@ -4869,28 +5117,28 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
     return true;
 
 // Fall through.
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
   case BUILT_IN_VAL_COMPARE_AND_SWAP_1:
 #else
   case BUILT_IN_SYNC_VAL_COMPARE_AND_SWAP_1:
 #endif
     Result = BuildCmpAndSwapAtomic(stmt, BITS_PER_UNIT, false);
     return true;
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
   case BUILT_IN_VAL_COMPARE_AND_SWAP_2:
 #else
   case BUILT_IN_SYNC_VAL_COMPARE_AND_SWAP_2:
 #endif
     Result = BuildCmpAndSwapAtomic(stmt, 2 * BITS_PER_UNIT, false);
     return true;
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
   case BUILT_IN_VAL_COMPARE_AND_SWAP_4:
 #else
   case BUILT_IN_SYNC_VAL_COMPARE_AND_SWAP_4:
 #endif
     Result = BuildCmpAndSwapAtomic(stmt, 4 * BITS_PER_UNIT, false);
     return true;
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
   case BUILT_IN_VAL_COMPARE_AND_SWAP_8:
 #else
   case BUILT_IN_SYNC_VAL_COMPARE_AND_SWAP_8:
@@ -4902,7 +5150,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
     Result = BuildCmpAndSwapAtomic(stmt, 8 * BITS_PER_UNIT, false);
     return true;
 
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
   case BUILT_IN_FETCH_AND_ADD_8:
 #else
   case BUILT_IN_SYNC_FETCH_AND_ADD_8:
@@ -4911,7 +5159,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
     if (!TARGET_64BIT)
       return false;
 #endif
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
   case BUILT_IN_FETCH_AND_ADD_1:
   case BUILT_IN_FETCH_AND_ADD_2:
   case BUILT_IN_FETCH_AND_ADD_4: {
@@ -4923,7 +5171,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
     Result = BuildBinaryAtomic(stmt, AtomicRMWInst::Add);
     return true;
   }
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
   case BUILT_IN_FETCH_AND_SUB_8:
 #else
   case BUILT_IN_SYNC_FETCH_AND_SUB_8:
@@ -4932,7 +5180,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
     if (!TARGET_64BIT)
       return false;
 #endif
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
   case BUILT_IN_FETCH_AND_SUB_1:
   case BUILT_IN_FETCH_AND_SUB_2:
   case BUILT_IN_FETCH_AND_SUB_4: {
@@ -4944,7 +5192,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
     Result = BuildBinaryAtomic(stmt, AtomicRMWInst::Sub);
     return true;
   }
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
   case BUILT_IN_FETCH_AND_OR_8:
 #else
   case BUILT_IN_SYNC_FETCH_AND_OR_8:
@@ -4953,7 +5201,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
     if (!TARGET_64BIT)
       return false;
 #endif
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
   case BUILT_IN_FETCH_AND_OR_1:
   case BUILT_IN_FETCH_AND_OR_2:
   case BUILT_IN_FETCH_AND_OR_4: {
@@ -4965,7 +5213,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
     Result = BuildBinaryAtomic(stmt, AtomicRMWInst::Or);
     return true;
   }
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
   case BUILT_IN_FETCH_AND_AND_8:
 #else
   case BUILT_IN_SYNC_FETCH_AND_AND_8:
@@ -4974,7 +5222,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
     if (!TARGET_64BIT)
       return false;
 #endif
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
   case BUILT_IN_FETCH_AND_AND_1:
   case BUILT_IN_FETCH_AND_AND_2:
   case BUILT_IN_FETCH_AND_AND_4: {
@@ -4986,7 +5234,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
     Result = BuildBinaryAtomic(stmt, AtomicRMWInst::And);
     return true;
   }
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
   case BUILT_IN_FETCH_AND_XOR_8:
 #else
   case BUILT_IN_SYNC_FETCH_AND_XOR_8:
@@ -4995,7 +5243,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
     if (!TARGET_64BIT)
       return false;
 #endif
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
   case BUILT_IN_FETCH_AND_XOR_1:
   case BUILT_IN_FETCH_AND_XOR_2:
   case BUILT_IN_FETCH_AND_XOR_4: {
@@ -5007,7 +5255,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
     Result = BuildBinaryAtomic(stmt, AtomicRMWInst::Xor);
     return true;
   }
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
   case BUILT_IN_FETCH_AND_NAND_8:
 #else
   case BUILT_IN_SYNC_FETCH_AND_NAND_8:
@@ -5016,7 +5264,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
     if (!TARGET_64BIT)
       return false;
 #endif
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
   case BUILT_IN_FETCH_AND_NAND_1:
   case BUILT_IN_FETCH_AND_NAND_2:
   case BUILT_IN_FETCH_AND_NAND_4: {
@@ -5028,7 +5276,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
     Result = BuildBinaryAtomic(stmt, AtomicRMWInst::Nand);
     return true;
   }
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
   case BUILT_IN_LOCK_TEST_AND_SET_8:
 #else
   case BUILT_IN_SYNC_LOCK_TEST_AND_SET_8:
@@ -5037,7 +5285,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
     if (!TARGET_64BIT)
       return false;
 #endif
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
   case BUILT_IN_LOCK_TEST_AND_SET_1:
   case BUILT_IN_LOCK_TEST_AND_SET_2:
   case BUILT_IN_LOCK_TEST_AND_SET_4: {
@@ -5050,7 +5298,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
     return true;
   }
 
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
   case BUILT_IN_ADD_AND_FETCH_8:
 #else
   case BUILT_IN_SYNC_ADD_AND_FETCH_8:
@@ -5059,7 +5307,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
     if (!TARGET_64BIT)
       return false;
 #endif
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
   case BUILT_IN_ADD_AND_FETCH_1:
   case BUILT_IN_ADD_AND_FETCH_2:
   case BUILT_IN_ADD_AND_FETCH_4:
@@ -5070,7 +5318,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
 #endif
     Result = BuildBinaryAtomic(stmt, AtomicRMWInst::Add, Instruction::Add);
     return true;
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
   case BUILT_IN_SUB_AND_FETCH_8:
 #else
   case BUILT_IN_SYNC_SUB_AND_FETCH_8:
@@ -5079,7 +5327,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
     if (!TARGET_64BIT)
       return false;
 #endif
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
   case BUILT_IN_SUB_AND_FETCH_1:
   case BUILT_IN_SUB_AND_FETCH_2:
   case BUILT_IN_SUB_AND_FETCH_4:
@@ -5090,7 +5338,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
 #endif
     Result = BuildBinaryAtomic(stmt, AtomicRMWInst::Sub, Instruction::Sub);
     return true;
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
   case BUILT_IN_OR_AND_FETCH_8:
 #else
   case BUILT_IN_SYNC_OR_AND_FETCH_8:
@@ -5099,7 +5347,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
     if (!TARGET_64BIT)
       return false;
 #endif
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
   case BUILT_IN_OR_AND_FETCH_1:
   case BUILT_IN_OR_AND_FETCH_2:
   case BUILT_IN_OR_AND_FETCH_4:
@@ -5110,7 +5358,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
 #endif
     Result = BuildBinaryAtomic(stmt, AtomicRMWInst::Or, Instruction::Or);
     return true;
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
   case BUILT_IN_AND_AND_FETCH_8:
 #else
   case BUILT_IN_SYNC_AND_AND_FETCH_8:
@@ -5119,7 +5367,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
     if (!TARGET_64BIT)
       return false;
 #endif
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
   case BUILT_IN_AND_AND_FETCH_1:
   case BUILT_IN_AND_AND_FETCH_2:
   case BUILT_IN_AND_AND_FETCH_4:
@@ -5130,7 +5378,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
 #endif
     Result = BuildBinaryAtomic(stmt, AtomicRMWInst::And, Instruction::And);
     return true;
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
   case BUILT_IN_XOR_AND_FETCH_8:
 #else
   case BUILT_IN_SYNC_XOR_AND_FETCH_8:
@@ -5139,7 +5387,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
     if (!TARGET_64BIT)
       return false;
 #endif
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
   case BUILT_IN_XOR_AND_FETCH_1:
   case BUILT_IN_XOR_AND_FETCH_2:
   case BUILT_IN_XOR_AND_FETCH_4:
@@ -5150,7 +5398,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
 #endif
     Result = BuildBinaryAtomic(stmt, AtomicRMWInst::Xor, Instruction::Xor);
     return true;
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
   case BUILT_IN_NAND_AND_FETCH_8:
 #else
   case BUILT_IN_SYNC_NAND_AND_FETCH_8:
@@ -5159,7 +5407,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
     if (!TARGET_64BIT)
       return false;
 #endif
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
   case BUILT_IN_NAND_AND_FETCH_1:
   case BUILT_IN_NAND_AND_FETCH_2:
   case BUILT_IN_NAND_AND_FETCH_4: {
@@ -5168,22 +5416,38 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
   case BUILT_IN_SYNC_NAND_AND_FETCH_2:
   case BUILT_IN_SYNC_NAND_AND_FETCH_4: {
 #endif
-    tree return_type = gimple_call_return_type(stmt);
+    tree return_type = gimple_call_return_type(
+#if (GCC_MAJOR > 5)
+            (gcall *)
+#endif
+            stmt);
     Type *ResultTy = ConvertType(return_type);
-    Value *C[2] = { EmitMemory(gimple_call_arg(stmt, 0)),
-                    EmitMemory(gimple_call_arg(stmt, 1)) };
+    Value *C[2] = {
+#if (GCC_MAJOR < 5)
+                    EmitMemory(gimple_call_arg(stmt, 0)),
+                    EmitMemory(gimple_call_arg(stmt, 1))
+#else
+                    EmitMemory(gimple_call_arg((gcall *) stmt, 0)),
+                    EmitMemory(gimple_call_arg((gcall *) stmt, 1))
+#endif
+                  };
     C[0] = Builder.CreateBitCast(C[0], ResultTy->getPointerTo());
     C[1] = Builder.CreateIntCast(
         C[1], ResultTy, /*isSigned*/ !TYPE_UNSIGNED(return_type), "cast");
     Result = Builder.CreateAtomicRMW(AtomicRMWInst::Nand, C[0], C[1],
-                                     SequentiallyConsistent);
+#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
+                                     SequentiallyConsistent
+#else
+                                     AtomicOrdering::SequentiallyConsistent
+#endif
+                                     );
 
     Result = Builder.CreateAnd(Builder.CreateNot(Result), C[1]);
     Result = Builder.CreateIntToPtr(Result, ResultTy);
     return true;
   }
 
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
   case BUILT_IN_LOCK_RELEASE_1:
   case BUILT_IN_LOCK_RELEASE_2:
   case BUILT_IN_LOCK_RELEASE_4:
@@ -5205,35 +5469,35 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
     // to use "store atomic [...] release".
     Type *Ty;
     switch (DECL_FUNCTION_CODE(fndecl)) {
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
     case BUILT_IN_LOCK_RELEASE_16: // not handled; should use SSE on x86
 #else
     case BUILT_IN_SYNC_LOCK_RELEASE_16: // not handled; should use SSE on x86
 #endif
     default:
       llvm_unreachable("Not handled; should use SSE on x86!");
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
     case BUILT_IN_LOCK_RELEASE_1:
 #else
     case BUILT_IN_SYNC_LOCK_RELEASE_1:
 #endif
       Ty = Type::getInt8Ty(Context);
       break;
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
     case BUILT_IN_LOCK_RELEASE_2:
 #else
     case BUILT_IN_SYNC_LOCK_RELEASE_2:
 #endif
       Ty = Type::getInt16Ty(Context);
       break;
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
     case BUILT_IN_LOCK_RELEASE_4:
 #else
     case BUILT_IN_SYNC_LOCK_RELEASE_4:
 #endif
       Ty = Type::getInt32Ty(Context);
       break;
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
     case BUILT_IN_LOCK_RELEASE_8:
 #else
     case BUILT_IN_SYNC_LOCK_RELEASE_8:
@@ -5241,7 +5505,11 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
       Ty = Type::getInt64Ty(Context);
       break;
     }
-    Value *Ptr = EmitMemory(gimple_call_arg(stmt, 0));
+    Value *Ptr = EmitMemory(gimple_call_arg(
+#if (GCC_MAJOR > 5)
+                (gcall *)
+#endif
+                stmt, 0));
     Ptr = Builder.CreateBitCast(Ptr, Ty->getPointerTo());
     Builder.CreateStore(Constant::getNullValue(Ty), Ptr, true);
     Result = 0;
@@ -5252,8 +5520,16 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
 
 #if 1 // FIXME: Should handle these GCC extensions eventually.
   case BUILT_IN_LONGJMP: {
-    if (validate_gimple_arglist(stmt, POINTER_TYPE, INTEGER_TYPE, VOID_TYPE)) {
-      tree value = gimple_call_arg(stmt, 1);
+    if (validate_gimple_arglist(
+#if (GCC_MAJOR > 5)
+                (gcall *)
+#endif
+                stmt, POINTER_TYPE, INTEGER_TYPE, VOID_TYPE)) {
+      tree value = gimple_call_arg(
+#if (GCC_MAJOR > 5)
+              (gcall *)
+#endif
+              stmt, 1);
 
       if (!isa<INTEGER_CST>(value) ||
           cast<ConstantInt>(EmitMemory(value))->getValue() != 1) {
@@ -5275,19 +5551,25 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
   case BUILT_IN_APPLY:
   case BUILT_IN_RETURN:
   case BUILT_IN_SAVEREGS:
-#if (GCC_MINOR < 6)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 6)
   case BUILT_IN_ARGS_INFO:
 #endif
   case BUILT_IN_NEXT_ARG:
   case BUILT_IN_CLASSIFY_TYPE:
   case BUILT_IN_AGGREGATE_INCOMING_ADDRESS:
   case BUILT_IN_SETJMP_SETUP:
+#if (GCC_MAJOR < 5)
   case BUILT_IN_SETJMP_DISPATCHER:
+#endif
   case BUILT_IN_SETJMP_RECEIVER:
   case BUILT_IN_UPDATE_SETJMP_BUF:
       // FIXME: HACK: Just ignore these.
       {
-    Type *Ty = ConvertType(gimple_call_return_type(stmt));
+    Type *Ty = ConvertType(gimple_call_return_type(
+#if (GCC_MAJOR > 5)
+                (gcall *)
+#endif
+                stmt));
     if (!Ty->isVoidTy())
       Result = Constant::getNullValue(Ty);
     return true;
@@ -5309,20 +5591,39 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
       return true;
     }
 
-    Value *TreeToLLVM::EmitBuiltinBitCountIntrinsic(gimple stmt,
+    Value *TreeToLLVM::EmitBuiltinBitCountIntrinsic(gimple_statement_d *stmt,
                                                     Intrinsic::ID Id) {
-      Value *Amt = EmitMemory(gimple_call_arg(stmt, 0));
-      Value *Result = Builder.CreateCall2(
+      Value *Amt = EmitMemory(gimple_call_arg(
+#if (GCC_MAJOR > 5)
+                  (gcall *)
+#endif
+                  stmt, 0));
+      Value *Result =
+#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
+        Builder.CreateCall2(
           Intrinsic::getDeclaration(TheModule, Id, Amt->getType()), Amt,
           Builder.getTrue());
-      tree return_type = gimple_call_return_type(stmt);
+#else
+        Builder.CreateCall(
+          Intrinsic::getDeclaration(TheModule, Id, Amt->getType()),
+          {Amt, Builder.getTrue()});
+#endif
+      tree return_type = gimple_call_return_type(
+#if (GCC_MAJOR > 5)
+              (gcall *)
+#endif
+              stmt);
       Type *DestTy = ConvertType(return_type);
       return Builder.CreateIntCast(
           Result, DestTy, /*isSigned*/ !TYPE_UNSIGNED(return_type), "cast");
     }
 
-    Value *TreeToLLVM::EmitBuiltinSQRT(gimple stmt) {
-      Value *Amt = EmitMemory(gimple_call_arg(stmt, 0));
+    Value *TreeToLLVM::EmitBuiltinSQRT(gimple_statement_d *stmt) {
+      Value *Amt = EmitMemory(gimple_call_arg(
+#if (GCC_MAJOR > 5)
+                  (gcall *)
+#endif
+                  stmt, 0));
       Type *Ty = Amt->getType();
 
       return Builder.CreateCall(
@@ -5425,7 +5726,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
       if (!validate_gimple_arglist(stmt, REAL_TYPE, VOID_TYPE))
         return 0;
 
-#if GCC_MAJOR > 5
+#if (GCC_MAJOR > 5)
       if (targetm.libc_has_function(function_sincos)) {
 #else
       if (TARGET_HAS_SINCOS) {
@@ -6094,7 +6395,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
       return true;
     }
 
-#if (GCC_MINOR > 6)
+#if (GCC_MAJOR < 5 && GCC_MINOR > 6)
     bool TreeToLLVM::EmitBuiltinAssumeAligned(gimple stmt, Value * &Result) {
       if (!validate_gimple_arglist(stmt, POINTER_TYPE, INTEGER_TYPE, VOID_TYPE))
         return false;
@@ -6215,7 +6516,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
           Intrinsic::getDeclaration(TheModule, Intrinsic::init_trampoline);
       Builder.CreateCall(Intr, Ops);
 
-#if (GCC_MINOR > 5)
+#if (GCC_MAJOR < 5 && GCC_MINOR > 5)
       if (OnStack) {
         tree target = TREE_OPERAND(gimple_call_arg(stmt, 1), 0);
         warning_at(DECL_SOURCE_LOCATION(target), OPT_Wtrampolines,
@@ -6578,7 +6879,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
       return LV;
     }
 
-#if (GCC_MINOR > 5)
+#if (GCC_MAJOR < 5 && GCC_MINOR > 5)
     LValue TreeToLLVM::EmitLV_MEM_REF(tree exp) {
       // The address is the first operand offset in bytes by the second.
       Value *Addr = EmitRegister(TREE_OPERAND(exp, 0));
@@ -6596,13 +6897,13 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
       Addr = Builder.CreateBitCast(Addr, getPointerToType(TREE_TYPE(exp)));
 
       unsigned Alignment =
-#if (GCC_MINOR < 6)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 6)
           get_object_alignment(exp, TYPE_ALIGN(TREE_TYPE(exp)),
                                BIGGEST_ALIGNMENT);
-#elif(GCC_MINOR < 7)
+#elif(GCC_MAJOR < 5 && GCC_MINOR < 7)
       std::max(get_object_alignment(exp, BIGGEST_ALIGNMENT),
                TYPE_ALIGN(TREE_TYPE(exp)));
-#elif (GCC_MINOR < 8)
+#elif (GCC_MAJOR < 5 && GCC_MINOR < 8)
       get_object_or_type_alignment(exp);
 #else
       get_object_alignment(exp);
@@ -6613,7 +6914,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
     }
 #endif
 
-#if (GCC_MINOR < 6)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 6)
     LValue TreeToLLVM::EmitLV_MISALIGNED_INDIRECT_REF(tree exp) {
       // The lvalue is just the address.  The alignment is given by operand 1.
       unsigned Alignment = tree_low_cst(TREE_OPERAND(exp, 1), true);
@@ -6675,7 +6976,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
 
       Value *Addr;
       Value *Delta = 0; // Offset from base pointer in units
-#if (GCC_MINOR > 5)
+#if (GCC_MAJOR < 5 && GCC_MINOR > 5)
       // Starting with gcc 4.6 the address is base + index * step + index2 + offset.
       Addr = EmitRegister(TMR_BASE(exp));
       if (TMR_INDEX2(exp) && !integer_zerop(TMR_INDEX2(exp)))
@@ -6720,13 +7021,13 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
       // The result can be of a different pointer type even if we didn't advance it.
       Addr = Builder.CreateBitCast(Addr, getPointerToType(TREE_TYPE(exp)));
       unsigned Alignment =
-#if (GCC_MINOR < 6)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 6)
           get_object_alignment(exp, TYPE_ALIGN(TREE_TYPE(exp)),
                                BIGGEST_ALIGNMENT);
-#elif(GCC_MINOR < 7)
+#elif(GCC_MAJOR < 5 && GCC_MINOR < 7)
       std::max(get_object_alignment(exp, BIGGEST_ALIGNMENT),
                TYPE_ALIGN(TREE_TYPE(exp)));
-#elif (GCC_MINOR < 8)
+#elif (GCC_MAJOR < 5 && GCC_MINOR < 8)
       get_object_or_type_alignment(exp);
 #else
       get_object_alignment(exp);
@@ -6945,7 +7246,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
     Constant *TreeToLLVM::EmitVectorRegisterConstant(tree reg) {
       // If there are no elements then immediately return the default value for a
       // small speedup.
-#if (GCC_MINOR < 8)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 8)
       if (!TREE_VECTOR_CST_ELTS(reg))
 #else
       if (!VECTOR_CST_NELTS(reg))
@@ -6955,7 +7256,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
       // Convert the elements.
       SmallVector<Constant *, 16> Elts;
       tree elt_type = TREE_TYPE(TREE_TYPE(reg));
-#if (GCC_MINOR < 8)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 8)
       for (tree ch = TREE_VECTOR_CST_ELTS(reg); ch; ch = TREE_CHAIN(ch)) {
         tree elt = TREE_VALUE(ch);
 #else
@@ -8038,7 +8339,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
                                            : Builder.CreateSRem(LHS, RHS);
     }
 
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
     Value *TreeToLLVM::EmitReg_VEC_EXTRACT_EVEN_EXPR(tree op0, tree op1) {
       Value *LHS = EmitRegister(op0);
       Value *RHS = EmitRegister(op1);
@@ -8051,7 +8352,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
     }
 #endif
 
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
     Value *TreeToLLVM::EmitReg_VEC_EXTRACT_ODD_EXPR(tree op0, tree op1) {
       Value *LHS = EmitRegister(op0);
       Value *RHS = EmitRegister(op1);
@@ -8064,7 +8365,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
     }
 #endif
 
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
     Value *TreeToLLVM::EmitReg_VEC_INTERLEAVE_HIGH_EXPR(tree op0, tree op1) {
       Value *LHS = EmitRegister(op0);
       Value *RHS = EmitRegister(op1);
@@ -8080,7 +8381,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
     }
 #endif
 
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
     Value *TreeToLLVM::EmitReg_VEC_INTERLEAVE_LOW_EXPR(tree op0, tree op1) {
       Value *LHS = EmitRegister(op0);
       Value *RHS = EmitRegister(op1);
@@ -8121,7 +8422,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
       return Builder.CreateShuffleVector(LHS, RHS, ConstantVector::get(Mask));
     }
 
-#if (GCC_MINOR > 6)
+#if (GCC_MAJOR < 5 && GCC_MINOR > 6)
     Value *TreeToLLVM::EmitReg_VEC_PERM_EXPR(tree op0, tree op1, tree op2) {
       unsigned Length = (unsigned) TYPE_VECTOR_SUBPARTS(TREE_TYPE(op0));
 
@@ -8187,7 +8488,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
     }
 #endif
 
-#if (GCC_MINOR > 5)
+#if (GCC_MAJOR < 5 && GCC_MINOR > 5)
     Value *TreeToLLVM::EmitReg_FMA_EXPR(tree op0, tree op1, tree op2) {
       Value *V0 = EmitRegister(op0);
       Value *V1 = EmitRegister(op1);
@@ -8808,7 +9109,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
     void TreeToLLVM::RenderGIMPLE_ASSIGN(gimple stmt) {
       tree lhs = gimple_assign_lhs(stmt);
 
-#if (GCC_MINOR > 6)
+#if (GCC_MAJOR < 5 && GCC_MINOR > 6)
       // Assigning a right-hand side with TREE_CLOBBER_P says that the left-hand
       // side is dead from this point on.  Output an llvm.lifetime.end intrinsic.
       if (get_gimple_rhs_class(gimple_expr_code(stmt)) == GIMPLE_SINGLE_RHS &&
@@ -9146,7 +9447,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
       tree_code code = gimple_assign_rhs_code(stmt);
       tree rhs1 = gimple_assign_rhs1(stmt);
       tree rhs2 = gimple_assign_rhs2(stmt);
-#if (GCC_MINOR > 5)
+#if (GCC_MAJOR < 5 && GCC_MINOR > 5)
       tree rhs3 = gimple_assign_rhs3(stmt);
 #endif
 
@@ -9295,7 +9596,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
       case TRUTH_XOR_EXPR:
         RHS = EmitReg_TruthOp(type, rhs1, rhs2, Instruction::Xor);
         break;
-#if (GCC_MINOR < 7)
+#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
       case VEC_EXTRACT_EVEN_EXPR:
         RHS = EmitReg_VEC_EXTRACT_EVEN_EXPR(rhs1, rhs2);
         break;
@@ -9338,12 +9639,12 @@ bool TreeToLLVM::EmitBuiltinCall(gimple stmt, tree fndecl,
         break;
 
 // Ternary expressions.
-#if (GCC_MINOR > 5)
+#if (GCC_MAJOR < 5 && GCC_MINOR > 5)
       case FMA_EXPR:
         RHS = EmitReg_FMA_EXPR(rhs1, rhs2, rhs3);
         break;
 #endif
-#if (GCC_MINOR > 6)
+#if (GCC_MAJOR < 5 && GCC_MINOR > 6)
       case COND_EXPR:
       case VEC_COND_EXPR:
         RHS = EmitReg_CondExpr(rhs1, rhs2, rhs3);
@@ -9518,7 +9819,11 @@ void TreeToLLVM::WriteScalarToLHS(tree lhs, Value * RHS) {
   // Load and store the minimum number of bytes that covers the field.
   unsigned LoadSizeInBits = LV.BitStart + LV.BitSize;
   LoadSizeInBits =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      (unsigned) alignTo(LoadSizeInBits, BITS_PER_UNIT);
+#else
       (unsigned) RoundUpToAlignment(LoadSizeInBits, BITS_PER_UNIT);
+#endif
   Type *LoadType = IntegerType::get(Context, LoadSizeInBits);
 
   // Load the existing bits.
