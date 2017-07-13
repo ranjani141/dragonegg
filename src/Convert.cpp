@@ -79,8 +79,10 @@ extern "C" {
 #include "gimple.h"
 #include "tree-cfg.h"
 #include "gimple-iterator.h"
-#include "gimple-pretty-print.h"
 #include "tree-eh.h"
+#include "emit-rtl.h"
+#include "fold-const.h"
+#include "stmt.h"
 #endif
 #include "tree-pass.h"
 
@@ -3894,7 +3896,8 @@ void TreeToLLVM::EmitModifyOfRegisterVariable(tree decl, Value *RHS) {
 ///       punctuation.
 /// Other %xN expressions are turned into LLVM ${N:x} operands.
 ///
-static std::string ConvertInlineAsmStr(gimple stmt, unsigned NumOperands) {
+static std::string ConvertInlineAsmStr(gimple_statement_d *stmt,
+                                       unsigned NumOperands) {
   const char *AsmStr = 
 #if (GCC_MAJOR < 5)
       gimple_asm_string(stmt);
@@ -4000,7 +4003,7 @@ static std::string ConvertInlineAsmStr(gimple stmt, unsigned NumOperands) {
 /// isOperandMentioned - Return true if the given operand is explicitly
 /// mentioned in the asm string.  For example if passed operand 1 then
 /// this routine checks that the asm string does not contain "%1".
-static bool isOperandMentioned(gimple stmt, unsigned OpNum) {
+static bool isOperandMentioned(gimple_statement_d *stmt, unsigned OpNum) {
   // If this is a non-extended ASM then the contents of the asm string are not
   // to be interpreted.
 #if (GCC_MAJOR < 5)
@@ -4219,7 +4222,8 @@ static int MatchWeight(const char *Constraint, tree Operand) {
 /// gcc's algorithm for picking "the best" tuple is quite complicated, and
 /// is performed after things like SROA, not before.  At the moment we are
 /// just trying to pick one that will work.  This may get refined.
-static void ChooseConstraintTuple(gimple stmt, const char **Constraints,
+static void ChooseConstraintTuple(gimple_statement_d *stmt,
+                                  const char **Constraints,
                                   unsigned NumChoices,
                                   BumpPtrAllocator &StringStorage) {
 #if (GCC_MAJOR < 5)
@@ -5997,11 +6001,12 @@ bool TreeToLLVM::EmitBuiltinCall(gimple_statement_d *stmt, tree fndecl,
               stmt, 0);
       Value *Amt = EmitMemory(arg0);
       bool AmtIsSigned = !TYPE_UNSIGNED(TREE_TYPE(arg0));
-      bool ExpIsSigned = !TYPE_UNSIGNED(gimple_call_return_type(
+      bool ExpIsSigned =
 #if (GCC_MAJOR > 4)
-                  (gcall *)
+          !TYPE_UNSIGNED(gimple_call_return_type((gcall *) stmt));
+#else
+          !TYPE_UNSIGNED(gimple_call_return_type(stmt));
 #endif
-                  stmt));
       Result = CastToAnyType(Amt, AmtIsSigned,
                              ConvertType(gimple_call_return_type(
 #if (GCC_MAJOR > 4)
@@ -6260,9 +6265,15 @@ bool TreeToLLVM::EmitBuiltinCall(gimple_statement_d *stmt, tree fndecl,
 
       Ptr = Builder.CreateBitCast(Ptr, Type::getInt8PtrTy(Context));
 
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      Builder.CreateCall(
+          Intrinsic::getDeclaration(TheModule, Intrinsic::prefetch),
+          {Ptr, ReadWrite, Locality, Data});
+#else
       Builder.CreateCall4(
           Intrinsic::getDeclaration(TheModule, Intrinsic::prefetch), Ptr,
           ReadWrite, Locality, Data);
+#endif
       return true;
     }
 
@@ -6366,16 +6377,18 @@ bool TreeToLLVM::EmitBuiltinCall(gimple_statement_d *stmt, tree fndecl,
     // Exception handling builtins.
 
     bool TreeToLLVM::EmitBuiltinEHCopyValues(gimple_statement_d *stmt) {
-      unsigned DstRegionNo = tree_low_cst(gimple_call_arg(
+      unsigned DstRegionNo =
 #if (GCC_MAJOR > 4)
-                  (gcall *)
+          tree_to_shwi(gimple_call_arg((gcall *) stmt, 0));
+#else
+          tree_low_cst(gimple_call_arg(stmt, 0), 0);
 #endif
-                  stmt, 0), 0);
-      unsigned SrcRegionNo = tree_low_cst(gimple_call_arg(
+      unsigned SrcRegionNo =
 #if (GCC_MAJOR > 4)
-                  (gcall *)
+          tree_to_shwi(gimple_call_arg((gcall *) stmt, 1));
+#else
+          tree_low_cst(gimple_call_arg(stmt, 1), 0);
 #endif
-                  stmt, 1), 0);
       // Copy the exception pointer.
       Value *ExcPtr = Builder.CreateLoad(getExceptionPtr(SrcRegionNo));
       Builder.CreateStore(ExcPtr, getExceptionPtr(DstRegionNo));
@@ -6388,11 +6401,12 @@ bool TreeToLLVM::EmitBuiltinCall(gimple_statement_d *stmt, tree fndecl,
     bool TreeToLLVM::EmitBuiltinEHFilter(gimple_statement_d *stmt,
                                          Value * &Result) {
       // Lookup the local that holds the selector value for this region.
-      unsigned RegionNo = tree_low_cst(gimple_call_arg(
+      unsigned RegionNo =
 #if (GCC_MAJOR > 4)
-                  (gcall *)
+          tree_to_shwi(gimple_call_arg((gcall *) stmt, 0));
+#else
+          tree_low_cst(gimple_call_arg(stmt, 0), 0);
 #endif
-                  stmt, 0), 0);
       AllocaInst *Filter = getExceptionFilter(RegionNo);
       // Load the selector value out.
       Result = Builder.CreateLoad(Filter);
@@ -6410,11 +6424,12 @@ bool TreeToLLVM::EmitBuiltinCall(gimple_statement_d *stmt, tree fndecl,
     bool TreeToLLVM::EmitBuiltinEHPointer(gimple_statement_d *stmt,
                                           Value * &Result) {
       // Lookup the local that holds the exception pointer for this region.
-      unsigned RegionNo = tree_low_cst(gimple_call_arg(
+      unsigned RegionNo =
 #if (GCC_MAJOR > 4)
-                  (gcall *)
+          tree_to_shwi(gimple_call_arg((gcall *) stmt, 0));
+#else
+          tree_low_cst(gimple_call_arg(stmt, 0), 0);
 #endif
-                  stmt, 0), 0);
       AllocaInst *ExcPtr = getExceptionPtr(RegionNo);
       // Load the exception pointer out.
       Result = Builder.CreateLoad(ExcPtr);
@@ -6515,7 +6530,12 @@ bool TreeToLLVM::EmitBuiltinCall(gimple_statement_d *stmt, tree fndecl,
         return false;
       }
 
-      iwhich = tree_low_cst(which, 1);
+      iwhich = 
+#if (GCC_MAJOR > 4)
+          tree_to_shwi(which);
+#else
+          tree_low_cst(which, 1);
+#endif
       iwhich = EH_RETURN_DATA_REGNO(iwhich);
       if (iwhich == INVALID_REGNUM)
         return false;
@@ -6783,7 +6803,12 @@ bool TreeToLLVM::EmitBuiltinCall(gimple_statement_d *stmt, tree fndecl,
                   (gcall *)
 #endif
                   stmt, 1));
-      Result = Builder.CreateCall2(ExpectIntr, ArgValue, ExpectedValue);
+      Result =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+          Builder.CreateCall(ExpectIntr, {ArgValue, ExpectedValue});
+#else
+          Builder.CreateCall2(ExpectIntr, ArgValue, ExpectedValue);
+#endif
       Result = Reg2Mem(Result, type, Builder);
       return true;
     }
@@ -6926,11 +6951,12 @@ bool TreeToLLVM::EmitBuiltinCall(gimple_statement_d *stmt, tree fndecl,
 
 #if GCC_VERSION_CODE > GCC_VERSION(4, 5)
       if (OnStack) {
-        tree target = TREE_OPERAND(gimple_call_arg(
+        tree target =
 #if (GCC_MAJOR > 4)
-                    (gcall *)
+            TREE_OPERAND(gimple_call_arg((gcall *) stmt, 1), 0);
+#else
+            TREE_OPERAND(gimple_call_arg(stmt, 1), 0);
 #endif
-                    stmt, 1), 0);
         warning_at(DECL_SOURCE_LOCATION(target), OPT_Wtrampolines,
                    "trampoline generated for nested function %qD", target);
       }
@@ -7185,7 +7211,11 @@ bool TreeToLLVM::EmitBuiltinCall(gimple_statement_d *stmt, tree fndecl,
       if (MemberIndex < INT_MAX) {
         assert(!TREE_OPERAND(exp, 2) && "Constant not gimple min invariant?");
         // Get a pointer to the byte in which the GCC field starts.
-        FieldPtr = Builder.CreateStructGEP(StructAddrLV.Ptr, MemberIndex,
+        FieldPtr = Builder.CreateStructGEP(
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+                                           FieldTy,
+#endif
+                                           StructAddrLV.Ptr, MemberIndex,
                                            flag_verbose_asm ? "cr" : "");
         // Within that byte, the bit at which the GCC field starts.
         BitStart = FieldBitOffset & 7;
@@ -7329,7 +7359,12 @@ bool TreeToLLVM::EmitBuiltinCall(gimple_statement_d *stmt, tree fndecl,
 #if GCC_VERSION_CODE < GCC_VERSION(4, 6)
     LValue TreeToLLVM::EmitLV_MISALIGNED_INDIRECT_REF(tree exp) {
       // The lvalue is just the address.  The alignment is given by operand 1.
-      unsigned Alignment = tree_low_cst(TREE_OPERAND(exp, 1), true);
+      unsigned Alignment = 
+#if (GCC_MAJOR > 4)
+          tree_to_shwi(TREE_OPERAND(exp, 1));
+#else
+          tree_low_cst(TREE_OPERAND(exp, 1), true);
+#endif
       // The alignment need not be a power of two, so replace it with the largest
       // power of two that divides it.
       Alignment &= -Alignment;
@@ -7371,7 +7406,11 @@ bool TreeToLLVM::EmitBuiltinCall(gimple_statement_d *stmt, tree fndecl,
         // IMAGPART alignment = MinAlign(Ptr.Alignment, sizeof field);
         Alignment = MinAlign(Ptr.getAlignment(),
                              DL.getTypeAllocSize(Ptr.Ptr->getType()));
-      return LValue(Builder.CreateStructGEP(Ptr.Ptr, Idx,
+      return LValue(Builder.CreateStructGEP(
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+                                            Ptr.Ptr->getType(),
+#endif
+                                            Ptr.Ptr, Idx,
                                             flag_verbose_asm ? "prtxpr" : ""),
                     Alignment);
     }
@@ -7475,7 +7514,12 @@ bool TreeToLLVM::EmitBuiltinCall(gimple_statement_d *stmt, tree fndecl,
       assert(is_gimple_reg_type(TREE_TYPE(addr)) && "Not of register type!");
 
       // Any generated code goes in the entry block.
-      BasicBlock *EntryBlock = Fn->begin();
+      BasicBlock *EntryBlock =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+          &(*Fn->begin());
+#else
+           Fn->begin();
+#endif
 
       // Note the current builder position.
       BasicBlock *SavedInsertBB = Builder.GetInsertBlock();
@@ -7804,7 +7848,11 @@ bool TreeToLLVM::EmitBuiltinCall(gimple_statement_d *stmt, tree fndecl,
 
       // Create a builder that inserts code before the SSAInsertionPoint marker.
       LLVMBuilder SSABuilder(Context, Builder.getFolder());
-      SSABuilder.SetInsertPoint(SSAInsertionPoint->getParent(),
+      // https://reviews.llvm.org/rL249925
+      SSABuilder.SetInsertPoint(
+#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
+                                SSAInsertionPoint->getParent(),
+#endif
                                 SSAInsertionPoint);
 
       // Use it to load the parameter value.
@@ -8968,7 +9016,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple_statement_d *stmt, tree fndecl,
     //                  ... Render* - Convert GIMPLE to LLVM ...
     //===----------------------------------------------------------------------===//
 
-    void TreeToLLVM::RenderGIMPLE_ASM(gimple stmt) {
+    void TreeToLLVM::RenderGIMPLE_ASM(gimple_statement_d *stmt) {
       // A gimple asm statement consists of an asm string, a list of outputs, a list
       // of inputs, a list of clobbers, a list of labels and a "volatile" flag.
       // These correspond directly to the elements of an asm statement.  For example
@@ -9015,14 +9063,30 @@ bool TreeToLLVM::EmitBuiltinCall(gimple_statement_d *stmt, tree fndecl,
       // and TREE_VALUE holding the appropriate LABEL_DECL.
 
       // TODO: Add support for labels.
-      if (gimple_asm_nlabels(stmt) > 0) {
+      if (gimple_asm_nlabels(
+#if (GCC_MAJOR > 4)
+                  as_a<gasm *>
+#endif
+                  (stmt)) > 0) {
         sorry("'asm goto' not supported");
         return;
       }
 
-      const unsigned NumOutputs = gimple_asm_noutputs(stmt);
-      const unsigned NumInputs = gimple_asm_ninputs(stmt);
-      const unsigned NumClobbers = gimple_asm_nclobbers(stmt);
+      const unsigned NumOutputs = gimple_asm_noutputs(
+#if (GCC_MAJOR > 4)
+              as_a<gasm *>
+#endif
+              (stmt));
+      const unsigned NumInputs = gimple_asm_ninputs(
+#if (GCC_MAJOR > 4)
+              as_a<gasm *>
+#endif
+              (stmt));
+      const unsigned NumClobbers = gimple_asm_nclobbers(
+#if (GCC_MAJOR > 4)
+              as_a<gasm *>
+#endif
+              (stmt));
 
       /// Constraints - The output/input constraints, concatenated together in array
       /// form instead of list form.  This way of doing things is forced on us by
@@ -9033,7 +9097,11 @@ bool TreeToLLVM::EmitBuiltinCall(gimple_statement_d *stmt, tree fndecl,
 
       // Initialize the Constraints array.
       for (unsigned i = 0; i != NumOutputs; ++i) {
-        tree Output = gimple_asm_output_op(stmt, i);
+        tree Output = gimple_asm_output_op(
+#if (GCC_MAJOR > 4)
+                as_a<gasm *>
+#endif
+                (stmt), i);
         // If there's an erroneous arg then bail out.
         if (TREE_TYPE(TREE_VALUE(Output)) == error_mark_node)
           return;
@@ -9043,7 +9111,11 @@ bool TreeToLLVM::EmitBuiltinCall(gimple_statement_d *stmt, tree fndecl,
         Constraints[i] = Constraint;
       }
       for (unsigned i = 0; i != NumInputs; ++i) {
-        tree Input = gimple_asm_input_op(stmt, i);
+        tree Input = gimple_asm_input_op(
+#if (GCC_MAJOR > 4)
+                as_a<gasm *>
+#endif
+                (stmt), i);
         // If there's an erroneous arg then bail out.
         if (TREE_TYPE(TREE_VALUE(Input)) == error_mark_node)
           return;
@@ -9057,7 +9129,11 @@ bool TreeToLLVM::EmitBuiltinCall(gimple_statement_d *stmt, tree fndecl,
       // by commas.
       unsigned NumChoices = 0; // sentinal; real value is always at least 1.
       for (unsigned i = 0; i != NumInputs; ++i) {
-        tree Input = gimple_asm_input_op(stmt, i);
+        tree Input = gimple_asm_input_op(
+#if (GCC_MAJOR > 4)
+                as_a<gasm *>
+#endif
+                (stmt), i);
         unsigned NumInputChoices = 1;
         for (const char *
                  p = TREE_STRING_POINTER(TREE_VALUE(TREE_PURPOSE(Input)));
@@ -9073,7 +9149,11 @@ bool TreeToLLVM::EmitBuiltinCall(gimple_statement_d *stmt, tree fndecl,
           NumChoices = NumInputChoices;
       }
       for (unsigned i = 0; i != NumOutputs; ++i) {
-        tree Output = gimple_asm_output_op(stmt, i);
+        tree Output = gimple_asm_output_op(
+#if (GCC_MAJOR > 4)
+                as_a<gasm *>
+#endif
+                (stmt), i);
         unsigned NumOutputChoices = 1;
         for (const char *
                  p = TREE_STRING_POINTER(TREE_VALUE(TREE_PURPOSE(Output)));
@@ -9098,7 +9178,11 @@ bool TreeToLLVM::EmitBuiltinCall(gimple_statement_d *stmt, tree fndecl,
 
       // HasSideEffects - Whether the LLVM inline asm should be marked as having
       // side effects.
-      bool HasSideEffects = gimple_asm_volatile_p(stmt) || (NumOutputs == 0);
+      bool HasSideEffects = gimple_asm_volatile_p(
+#if (GCC_MAJOR > 4)
+              as_a<gasm *>
+#endif
+              (stmt)) || (NumOutputs == 0);
 
       // CallResultTypes - The inline asm call may return one or more results.  The
       // types of the results are recorded here along with a flag indicating whether
@@ -9133,7 +9217,11 @@ bool TreeToLLVM::EmitBuiltinCall(gimple_statement_d *stmt, tree fndecl,
 
       // Process outputs.
       for (unsigned i = 0; i != NumOutputs; ++i) {
-        tree Output = gimple_asm_output_op(stmt, i);
+        tree Output = gimple_asm_output_op(
+#if (GCC_MAJOR > 4)
+                as_a<gasm *>
+#endif
+                (stmt), i);
         tree Operand = TREE_VALUE(Output);
 
         // Parse the output constraint.
@@ -9208,7 +9296,11 @@ bool TreeToLLVM::EmitBuiltinCall(gimple_statement_d *stmt, tree fndecl,
 
       // Process inputs.
       for (unsigned i = 0; i != NumInputs; ++i) {
-        tree Input = gimple_asm_input_op(stmt, i);
+        tree Input = gimple_asm_input_op(
+#if (GCC_MAJOR > 4)
+                as_a<gasm *>
+#endif
+                (stmt), i);
         tree Val = TREE_VALUE(Input);
         tree type = TREE_TYPE(Val);
         bool IsSigned = !TYPE_UNSIGNED(type);
@@ -9382,32 +9474,74 @@ bool TreeToLLVM::EmitBuiltinCall(gimple_statement_d *stmt, tree fndecl,
         // Create input, output & clobber lists for the benefit of md_asm_clobbers.
         tree outputs = NULL_TREE;
         if (NumOutputs) {
-          tree t = outputs = gimple_asm_output_op(stmt, 0);
+          tree t = outputs = gimple_asm_output_op(
+#if (GCC_MAJOR > 4)
+                  as_a<gasm *>
+#endif
+                  (stmt), 0);
           for (unsigned i = 1; i < NumOutputs; i++) {
-            TREE_CHAIN(t) = gimple_asm_output_op(stmt, i);
-            t = gimple_asm_output_op(stmt, i);
+            TREE_CHAIN(t) = gimple_asm_output_op(
+#if (GCC_MAJOR > 4)
+                    as_a<gasm *>
+#endif
+                    (stmt), i);
+            t = gimple_asm_output_op(
+#if (GCC_MAJOR > 4)
+                    as_a<gasm *>
+#endif
+                    (stmt), i);
           }
         }
 
         tree inputs = NULL_TREE;
         if (NumInputs) {
-          tree t = inputs = gimple_asm_input_op(stmt, 0);
+          tree t = inputs = gimple_asm_input_op(
+#if (GCC_MAJOR > 4)
+                  as_a<gasm *>
+#endif
+                  (stmt), 0);
           for (unsigned i = 1; i < NumInputs; i++) {
-            TREE_CHAIN(t) = gimple_asm_input_op(stmt, i);
-            t = gimple_asm_input_op(stmt, i);
+            TREE_CHAIN(t) = gimple_asm_input_op(
+#if (GCC_MAJOR > 4)
+                    as_a<gasm *>
+#endif
+                    (stmt), i);
+            t = gimple_asm_input_op(
+#if (GCC_MAJOR > 4)
+                    as_a<gasm *>
+#endif
+                    (stmt), i);
           }
         }
 
         tree clobbers = NULL_TREE;
         if (NumClobbers) {
-          tree t = clobbers = gimple_asm_clobber_op(stmt, 0);
+          tree t = clobbers = gimple_asm_clobber_op(
+#if (GCC_MAJOR > 4)
+                  as_a<gasm *>
+#endif
+                  (stmt), 0);
           for (unsigned i = 1; i < NumClobbers; i++) {
-            TREE_CHAIN(t) = gimple_asm_clobber_op(stmt, i);
-            t = gimple_asm_clobber_op(stmt, i);
+            TREE_CHAIN(t) = gimple_asm_clobber_op(
+#if (GCC_MAJOR > 4)
+                    as_a<gasm *>
+#endif
+                    (stmt), i);
+            t = gimple_asm_clobber_op(
+#if (GCC_MAJOR > 4)
+                    as_a<gasm *>
+#endif
+                    (stmt), i);
           }
         }
 
-        Clobbers = targetm.md_asm_clobbers(outputs, inputs, clobbers);
+        Clobbers =
+#if (GCC_MAJOR > 4)
+            // FIXME targetm.md_asm_adjust(outputs, inputs, clobbers);
+            0;
+#else
+            targetm.md_asm_clobbers(outputs, inputs, clobbers);
+#endif
       }
 
       for (; Clobbers; Clobbers = TREE_CHAIN(Clobbers)) {
@@ -9481,10 +9615,21 @@ bool TreeToLLVM::EmitBuiltinCall(gimple_statement_d *stmt, tree fndecl,
       CallInst *CV = Builder.CreateCall(
           Asm, CallOps, CallResultTypes.empty() ? "" : "asmtmp");
       CV->setDoesNotThrow();
-      if (gimple_has_location(stmt)) {
+      if (gimple_has_location(
+#if (GCC_MAJOR > 4)
+                  (gimple *)
+#endif
+                  stmt)) {
         // Pass the location of the asm using a !srcloc metadata.
-        Constant *LocationCookie = Builder.getInt64(gimple_location(stmt));
+        Constant *LocationCookie = Builder.getInt64(gimple_location(
+#if (GCC_MAJOR > 4)
+                    (gimple *)
+#endif
+                    stmt));
+        // FIXME
+#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
         CV->setMetadata("srcloc", MDNode::get(Context, LocationCookie));
+#endif
       }
 
       // If the call produces a value, store it into the destination.

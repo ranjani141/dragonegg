@@ -900,7 +900,7 @@ static Constant *ConvertArrayCONSTRUCTOR(tree exp, TargetFolder &Folder) {
 
       assert(host_integerp(first, 1) && host_integerp(last, 1) &&
              "Unknown range_expr!");
-#if GCC_MAJOR > 4
+#if (GCC_MAJOR > 4)
       FirstIndex = tree_to_shwi(first);
       LastIndex = tree_to_shwi(last);
 #else
@@ -912,7 +912,7 @@ static Constant *ConvertArrayCONSTRUCTOR(tree exp, TargetFolder &Folder) {
       if (lower_bnd != NULL_TREE)
         index = fold_build2(MINUS_EXPR, main_type(index), index, lower_bnd);
       assert(host_integerp(index, 1));
-#if GCC_MAJOR > 4
+#if (GCC_MAJOR > 4)
       FirstIndex = tree_to_shwi(index);
 #else
       FirstIndex = tree_low_cst(index, 1);
