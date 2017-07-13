@@ -89,6 +89,7 @@ extern "C" {
 #if (GCC_MAJOR > 4)
 #define ENTRY_BLOCK_PTR         (cfun->cfg->x_entry_block_ptr)
 #define FOR_EACH_BB(BB) FOR_EACH_BB_FN (BB, cfun)
+#define MAX_RECOG_OPERANDS 101
 #endif
 
 using namespace llvm;
@@ -9095,6 +9096,15 @@ bool TreeToLLVM::EmitBuiltinCall(gimple_statement_d *stmt, tree fndecl,
       const char **Constraints = (const char **)alloca(
           (NumOutputs + NumInputs) * sizeof(const char *));
 
+#if (GCC_MAJOR > 4)
+      auto_vec<const char *, MAX_RECOG_OPERANDS> GConstraints;
+      auto_vec<rtx, MAX_RECOG_OPERANDS> OutputRvec;
+      auto_vec<rtx, MAX_RECOG_OPERANDS> InputRvec;
+      GConstraints.safe_grow(NumOutputs + NumInputs);
+      OutputRvec.safe_grow(NumOutputs);
+      InputRvec.safe_grow(NumInputs);
+#endif
+
       // Initialize the Constraints array.
       for (unsigned i = 0; i != NumOutputs; ++i) {
         tree Output = gimple_asm_output_op(
@@ -9108,7 +9118,10 @@ bool TreeToLLVM::EmitBuiltinCall(gimple_statement_d *stmt, tree fndecl,
         // Record the output constraint.
         const char *Constraint =
             TREE_STRING_POINTER(TREE_VALUE(TREE_PURPOSE(Output)));
-        Constraints[i] = Constraint;
+#if (GCC_MAJOR > 4)
+        GConstraints[i] =
+#endif
+            Constraints[i] = Constraint;
       }
       for (unsigned i = 0; i != NumInputs; ++i) {
         tree Input = gimple_asm_input_op(
@@ -9122,7 +9135,10 @@ bool TreeToLLVM::EmitBuiltinCall(gimple_statement_d *stmt, tree fndecl,
         // Record the input constraint.
         const char *Constraint =
             TREE_STRING_POINTER(TREE_VALUE(TREE_PURPOSE(Input)));
-        Constraints[NumOutputs + i] = Constraint;
+#if (GCC_MAJOR > 4)
+        GConstraints[i] =
+#endif
+            Constraints[NumOutputs + i] = Constraint;
       }
 
       // Look for multiple alternative constraints: multiple alternatives separated
@@ -9537,7 +9553,7 @@ bool TreeToLLVM::EmitBuiltinCall(gimple_statement_d *stmt, tree fndecl,
 
         Clobbers =
 #if (GCC_MAJOR > 4)
-            // FIXME targetm.md_asm_adjust(outputs, inputs, clobbers);
+            // FIXME targetm.md_asm_adjust(OutputRvec, InputRvec, GConstraints, clobbers);
             0;
 #else
             targetm.md_asm_clobbers(outputs, inputs, clobbers);
