@@ -54,10 +54,10 @@ endif
 endif
 
 GCC_PLUGIN_DIR=$(shell $(GCC) -print-file-name=plugin)
-GCC_VERSION=$(shell $(GCC) -dumpversion).0
-GCC_MAJOR=$(word 1, $(subst ., ,$(GCC_VERSION)))
-GCC_MINOR=$(word 2, $(subst ., ,$(GCC_VERSION)))
-GCC_MICRO=$(word 3, $(subst ., ,$(GCC_VERSION)))
+GCC_VERSION_STRING=$(shell $(GCC) -dumpversion).0
+GCC_MAJOR=$(word 1, $(subst ., ,$(GCC_VERSION_STRING)))
+GCC_MINOR=$(word 2, $(subst ., ,$(GCC_VERSION_STRING)))
+GCC_MICRO=$(word 3, $(subst ., ,$(GCC_VERSION_STRING)))
 TARGET_TRIPLE=$(shell $(GCC) -dumpmachine)
 
 LLVM_VERSION_STRING=$(shell $(LLVM_CONFIG) --version)
@@ -191,6 +191,8 @@ clean:
 # The following target exists for the benefit of the dragonegg maintainers, and
 # is not used in a normal build.  You need to specify the path to the GCC build
 # directory in GCC_BUILD_DIR.
+# FIXME: gengtype does not support macro https://gcc.gnu.org/ml/gcc/2017-07/msg00061.html
+# You have to comment #if (GCC_MAJOR == XXX) not feet your GCC version.
 GENGTYPE_INPUT=$(SRC_DIR)/Cache.cpp
 GENGTYPE_OUTPUT=$(INCLUDE_DIR)/dragonegg/gt-cache-$(GCC_MAJOR).$(GCC_MINOR).inc
 .PHONY: gt-cache.inc

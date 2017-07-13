@@ -88,10 +88,11 @@ extern "C" {
 #include "diagnostic.h"
 #include "flags.h"
 #include "gcc-plugin.h"
-#if GCC_MAJOR > 5
+#if (GCC_MAJOR > 4)
 #include "cgraph.h"
 #include "stor-layout.h"
 #include "context.h"
+#include "stringpool.h"
 #endif
 #include "intl.h"
 #include "langhooks.h"
@@ -119,8 +120,9 @@ tree default_mangle_decl_assembler_name(tree, tree);
 // Trees header.
 #include "dragonegg/Trees.h"
 
-#if (GCC_MAJOR != 4)
-#pragma message("Experimental GCC major version")
+#if (GCC_MAJOR < 4 || LLVM_VERSION_MAJOR < 3)
+#pragma error("Experimental only support GCC v4.x, v5.x, v6.x, v7.x, v8.x and "
+              "LLVM v3.x, v4.x, v5.x")
 #endif
 
 using namespace llvm;
@@ -130,7 +132,7 @@ int flag_no_simplify_libcalls;
 
 // Whether -fno-builtin was specified.
 // In GCC < 4.6, this variable is only defined in C family front ends.
-#if (GCC_MAJOR < 5 && GCC_MINOR < 6)
+#if GCC_VERSION_CODE < GCC_VERSION(4, 6)
 extern int flag_no_builtin __attribute__((weak));
 #endif
 
@@ -195,7 +197,7 @@ static void createPerFunctionOptimizationPasses();
 static void createPerModuleOptimizationPasses();
 
 // Compatibility hacks for older versions of GCC.
-#if (GCC_MAJOR < 6 && GCC_MINOR < 8)
+#if GCC_VERSION_CODE < GCC_VERSION(4, 8)
 
 static struct cgraph_node *cgraph_symbol(struct cgraph_node *N) { return N; }
 static struct varpool_node *varpool_symbol(struct varpool_node *N) { return N; }
@@ -214,7 +216,7 @@ static struct varpool_node *varpool_symbol(struct varpool_node *N) { return N; }
 #define FOR_EACH_VARIABLE(node) \
   for ((node) = varpool_nodes; (node); (node) = (node)->next)
 
-#elif GCC_MAJOR > 5
+#elif (GCC_MAJOR > 4)
 
 #define ipa_ref_list_referring_iterate(L,I,P) \
   (L)->referring.iterate ((I), &(P))
@@ -587,7 +589,7 @@ static void CreateTargetMachine(const std::string &TargetTriple) {
   Options.NoNaNsFPMath = flag_finite_math_only;
   Options.NoZerosInBSS = !flag_zero_initialized_in_bss;
   Options.UnsafeFPMath =
-#if (GCC_MAJOR > 4 || GCC_MINOR > 5)
+#if GCC_VERSION_CODE > GCC_VERSION(4, 5)
   fast_math_flags_set_p(&global_options);
 #else
   fast_math_flags_set_p();
@@ -627,7 +629,7 @@ static void CreateTargetMachine(const std::string &TargetTriple) {
 /// output_ident - Insert a .ident directive that identifies the plugin.
 static void output_ident(const char *ident_str) {
   const char *ident_asm_op = "\t.ident\t";
-#if (GCC_MAJOR < 5 && GCC_MINOR < 8)
+#if GCC_VERSION_CODE < GCC_VERSION(4, 8)
 #ifdef IDENT_ASM_OP
   ident_asm_op = IDENT_ASM_OP;
 #endif
@@ -653,7 +655,7 @@ static void CreateModule(const std::string &TargetTriple) {
 #endif
                          );
 
-#if (GCC_MAJOR < 5 && GCC_MINOR < 8)
+#if GCC_VERSION_CODE < GCC_VERSION(4, 8)
 #ifdef IDENT_ASM_OP
   if (!flag_no_ident) {
     std::string IdentString;
@@ -1107,13 +1109,13 @@ static void emit_alias(tree decl, tree target) {
     target = TREE_CHAIN(target);
 
   if (isa<IDENTIFIER_NODE>(target)) {
-#if GCC_MAJOR > 5
+#if (GCC_MAJOR > 4)
     if (struct cgraph_node *fnode = cgraph_node::get_for_asmname(target))
 #else
     if (struct cgraph_node *fnode = cgraph_node_for_asm(target))
 #endif
       target = cgraph_symbol(fnode)->decl;
-#if GCC_MAJOR > 5
+#if (GCC_MAJOR > 4)
     else if (struct varpool_node *vnode = varpool_node::get_for_asmname(target))
 #else
     else if (struct varpool_node *vnode = varpool_node_for_asm(target))
@@ -1181,7 +1183,7 @@ static void emit_alias(tree decl, tree target) {
 /// emit_varpool_aliases - Output any aliases associated with the given varpool
 /// node.
 static void emit_varpool_aliases(struct varpool_node *node) {
-#if (GCC_MAJOR < 6 && GCC_MINOR < 7)
+#if GCC_VERSION_CODE < GCC_VERSION(4, 7)
   for (struct varpool_node *alias = node->extra_name; alias;
        alias = alias->next)
     emit_alias(alias->decl, node->decl);
@@ -1196,11 +1198,13 @@ static void emit_varpool_aliases(struct varpool_node *node) {
     if (lookup_attribute("weakref",
                          DECL_ATTRIBUTES(varpool_symbol(alias)->decl)))
       continue;
-#if GCC_MAJOR > 5
-    emit_alias(varpool_symbol(alias)->decl, alias->get_constructor());
+    emit_alias(varpool_symbol(alias)->decl,
+#if (GCC_MAJOR > 4)
+               alias->get_constructor()
 #else
-    emit_alias(varpool_symbol(alias)->decl, alias->alias_of);
+               alias->alias_of
 #endif
+              );
     emit_varpool_aliases(alias);
   }
 #endif
@@ -1322,7 +1326,7 @@ static void emit_global(tree decl) {
   // Set the section for the global.
   if (isa<VAR_DECL>(decl)) {
     if (DECL_SECTION_NAME(decl)) {
-#if GCC_MAJOR > 5
+#if (GCC_MAJOR > 4)
       GV->setSection(StringRef(DECL_SECTION_NAME(decl)));
 #else
       GV->setSection(StringRef(TREE_STRING_POINTER(DECL_SECTION_NAME(decl))));
@@ -1390,9 +1394,9 @@ static void emit_global(tree decl) {
   // Output any associated aliases.
   if (isa<VAR_DECL>(decl))
     if (struct varpool_node *vnode =
-#if (GCC_MAJOR < 5 && GCC_MINOR < 6)
+#if GCC_VERSION_CODE < GCC_VERSION(4, 6)
         varpool_node(decl)
-#elif GCC_MAJOR > 5
+#elif (GCC_MAJOR > 4)
         varpool_node::get(decl)
 #else
         varpool_get_node(decl)
@@ -1504,7 +1508,7 @@ Value *make_decl_llvm(tree decl) {
 
   // Specifying a section attribute on a variable forces it into a
   // non-.bss section, and thus it cannot be common.
-#if GCC_MAJOR > 5
+#if (GCC_MAJOR > 4)
   if (isa<VAR_DECL>(decl) && DECL_SECTION_NAME(decl) != NULL &&
 #else
   if (isa<VAR_DECL>(decl) && DECL_SECTION_NAME(decl) != NULL_TREE &&
@@ -1808,10 +1812,8 @@ static void llvm_start_unit(void */*gcc_data*/, void */*user_data*/) {
   EmitIR |= flag_generate_lto != 0;
   // We have the same needs as GCC's LTO.  Always claim to be doing LTO.
   flag_lto =
-#if (GCC_MAJOR < 5 && GCC_MINOR > 5)
+#if GCC_VERSION_CODE > GCC_VERSION(4, 5)
       "";
-#elif GCC_MAJOR > 5
-  "";
 #else
   1;
 #endif
@@ -1843,7 +1845,7 @@ static void llvm_start_unit(void */*gcc_data*/, void */*user_data*/) {
 /// emit_cgraph_aliases - Output any aliases associated with the given cgraph
 /// node.
 static void emit_cgraph_aliases(struct cgraph_node *node) {
-#if (GCC_MAJOR < 5 && GCC_MINOR < 7)
+#if GCC_VERSION_CODE < GCC_VERSION(4, 7)
   struct cgraph_node *alias, *next;
   for (alias = node->same_body; alias && alias->next; alias = alias->next)
     ;
@@ -1886,7 +1888,7 @@ static void emit_current_function() {
   }
 
   // Output any associated aliases.
-#if GCC_MAJOR > 5
+#if (GCC_MAJOR > 4)
   emit_cgraph_aliases(cgraph_node::get(current_function_decl));
 #else
   emit_cgraph_aliases(cgraph_get_node(current_function_decl));
@@ -1914,13 +1916,13 @@ static unsigned int rtl_emit_function(void) {
   }
 
   // Free tree-ssa data structures.
-#if (GCC_MAJOR < 5 && GCC_MINOR < 8)
+#if GCC_VERSION_CODE < GCC_VERSION(4, 8)
   execute_free_datastructures();
 #else
   free_dominance_info(CDI_DOMINATORS);
   free_dominance_info(CDI_POST_DOMINATORS);
   // And get rid of annotations we no longer need.
-#if GCC_MAJOR > 5
+#if (GCC_MAJOR > 4)
   delete_tree_cfg_annotations(DECL_STRUCT_FUNCTION(current_function_decl));
 #else
   delete_tree_cfg_annotations();
@@ -1933,7 +1935,7 @@ static unsigned int rtl_emit_function(void) {
 }
 
 /// pass_rtl_emit_function - RTL pass that converts a function to LLVM IR.
-#if GCC_MAJOR < 6
+#if (GCC_MAJOR < 5)
 static struct rtl_opt_pass pass_rtl_emit_function = { {
   RTL_PASS, "rtl_emit_function",         /* name */
 #if (GCC_MINOR >= 8)
@@ -1974,7 +1976,7 @@ public:
 
 /// emit_file_scope_asms - Output any file-scope assembly.
 static void emit_file_scope_asms() {
-#if GCC_MAJOR > 5
+#if (GCC_MAJOR > 4)
   for (struct asm_node *anode = symtab->first_asm_symbol(); anode; anode = anode->next) {
 #else
   for (struct asm_node *anode = asm_nodes; anode; anode = anode->next) {
@@ -1985,12 +1987,12 @@ static void emit_file_scope_asms() {
     TheModule->appendModuleInlineAsm(TREE_STRING_POINTER(string));
   }
   // Remove the asms so gcc doesn't waste time outputting them.
-#if GCC_MAJOR < 6
+#if (GCC_MAJOR < 5)
   asm_nodes = NULL;
 #endif
 }
 
-#if (GCC_MAJOR < 6 && GCC_MINOR > 6)
+#if GCC_VERSION_CODE > GCC_VERSION(4, 6)
 /// get_alias_symbol - Return the name of the aliasee for this alias.
 static tree get_alias_symbol(tree decl) {
   tree alias = lookup_attribute("alias", DECL_ATTRIBUTES(decl));
@@ -2017,12 +2019,17 @@ static void emit_varpool_weakrefs() {
     if (vnode->alias && DECL_EXTERNAL(varpool_symbol(vnode)->decl) &&
         lookup_attribute("weakref",
                          DECL_ATTRIBUTES(varpool_symbol(vnode)->decl)))
-      emit_alias(varpool_symbol(vnode)->decl, vnode->alias_of ? vnode->alias_of
+      emit_alias(varpool_symbol(vnode)->decl,
+#if (GCC_MAJOR > 4)
+                 vnode->get_constructor() ? vnode->get_constructor()
+#else
+                 vnode->alias_of ? vnode->alias_of
+#endif
                  : get_alias_symbol(varpool_symbol(vnode)->decl));
 }
 #endif
 
-#if (GCC_MAJOR < 6 && GCC_MINOR < 8)
+#if GCC_VERSION_CODE < GCC_VERSION(4, 8)
 INSTANTIATE_VECTOR(alias_pair);
 #endif
 
@@ -2043,7 +2050,7 @@ static void llvm_emit_globals(void * /*gcc_data*/, void * /*user_data*/) {
   struct varpool_node *vnode;
   FOR_EACH_VARIABLE(vnode) {
     // If the node is explicitly marked as not being needed, then skip it.
-#if (GCC_MAJOR < 6 && GCC_MINOR < 8)
+#if GCC_VERSION_CODE < GCC_VERSION(4, 8)
     if (!vnode->needed)
       continue;
 #endif
@@ -2245,7 +2252,7 @@ static void llvm_finish(void */*gcc_data*/, void */*user_data*/) {
 static bool gate_null(void) { return false; }
 
 /// pass_gimple_null - Gimple pass that does nothing.
-#if GCC_MAJOR < 6
+#if (GCC_MAJOR < 5)
 static struct gimple_opt_pass pass_gimple_null = { {
   GIMPLE_PASS, "*gimple_null", /* name */
 #if (GCC_MINOR >= 8)
@@ -2286,7 +2293,7 @@ public:
 /// execute_correct_state - Correct the cgraph state to ensure that newly
 /// inserted functions are processed before being converted to LLVM IR.
 static unsigned int execute_correct_state(void) {
-#if GCC_MAJOR < 6
+#if (GCC_MAJOR < 5)
   if (cgraph_state < CGRAPH_STATE_IPA_SSA)
     cgraph_state = CGRAPH_STATE_IPA_SSA;
 #endif
@@ -2298,7 +2305,7 @@ static bool gate_correct_state(void) { return true; }
 
 /// pass_gimple_correct_state - Gimple pass that corrects the cgraph state so
 /// newly inserted functions are processed before being converted to LLVM IR.
-#if GCC_MAJOR < 6
+#if (GCC_MAJOR < 5)
 static struct gimple_opt_pass pass_gimple_correct_state = { {
   GIMPLE_PASS, "*gimple_correct_state", /* name */
 #if (GCC_MINOR >= 8)
@@ -2341,7 +2348,7 @@ public:
 #endif
 
 /// pass_ipa_null - IPA pass that does nothing.
-#if GCC_MAJOR < 6
+#if (GCC_MAJOR < 5)
 static struct ipa_opt_pass_d pass_ipa_null = {
   { IPA_PASS, "*ipa_null", /* name */
 #if (GCC_MINOR >= 8)
@@ -2404,7 +2411,7 @@ public:
 #endif
 
 /// pass_rtl_null - RTL pass that does nothing.
-#if GCC_MAJOR < 6
+#if (GCC_MAJOR < 5)
 static struct rtl_opt_pass pass_rtl_null = { { RTL_PASS, "*rtl_null", /* name */
 #if (GCC_MINOR >= 8)
                                                OPTGROUP_NONE,/* optinfo_flags */
@@ -2441,7 +2448,7 @@ public:
 #endif
 
 /// pass_simple_ipa_null - Simple IPA pass that does nothing.
-#if GCC_MAJOR < 6
+#if (GCC_MAJOR < 5)
 static struct simple_ipa_opt_pass pass_simple_ipa_null = { {
   SIMPLE_IPA_PASS, "*simple_ipa_null", /* name */
 #if (GCC_MINOR >= 8)
@@ -2627,7 +2634,7 @@ int __attribute__((visibility("default"))) plugin_init(
 
   // Register our garbage collector roots.
   // https://gcc.gnu.org/ml/gcc-patches/2014-11/msg02965.html
-#if GCC_MAJOR < 6
+#if (GCC_MAJOR < 5)
   register_callback(plugin_name, PLUGIN_REGISTER_GGC_CACHES, NULL,
 #else
   register_callback(plugin_name, PLUGIN_REGISTER_GGC_ROOTS, NULL,
@@ -2647,7 +2654,7 @@ int __attribute__((visibility("default"))) plugin_init(
 
 // Leave pass_ipa_function_and_variable_visibility.  Needed for correctness.
 
-#if (GCC_MAJOR < 6 && GCC_MINOR < 6)
+#if GCC_VERSION_CODE < GCC_VERSION(4, 6)
     // Turn off pass_ipa_early_inline.
     pass_info.pass = &pass_simple_ipa_null.pass;
     pass_info.reference_pass_name = "einline_ipa";
@@ -2667,10 +2674,11 @@ int __attribute__((visibility("default"))) plugin_init(
     // Leave pass_early_local_passes::pass_build_ssa.
 
     // Turn off pass_lower_vector.
-#if GCC_MAJOR < 6
-    pass_info.pass = &pass_gimple_null.pass;
+    pass_info.pass =
+#if (GCC_MAJOR < 5)
+        &pass_gimple_null.pass;
 #else
-    pass_info.pass = new pass_gimple_null(g);
+        new pass_gimple_null(g);
 #endif
     pass_info.reference_pass_name = "veclower";
     pass_info.ref_pass_instance_number = 0;
@@ -2690,10 +2698,11 @@ int __attribute__((visibility("default"))) plugin_init(
     // Insert a pass that ensures that any newly inserted functions, for example
     // those generated by OMP expansion, are processed before being converted to
     // LLVM IR.
-#if GCC_MAJOR < 6
-    pass_info.pass = &pass_gimple_correct_state.pass;
+    pass_info.pass =
+#if (GCC_MAJOR < 5)
+        &pass_gimple_correct_state.pass;
 #else
-    pass_info.pass = new pass_gimple_correct_state(g);
+        new pass_gimple_correct_state(g);
 #endif
     pass_info.reference_pass_name = "early_optimizations";
     pass_info.ref_pass_instance_number = 1;
@@ -2701,10 +2710,11 @@ int __attribute__((visibility("default"))) plugin_init(
     register_callback(plugin_name, PLUGIN_PASS_MANAGER_SETUP, NULL, &pass_info);
 
     // Turn off pass_early_local_passes::pass_all_early_optimizations.
-#if GCC_MAJOR < 6
-    pass_info.pass = &pass_gimple_null.pass;
+    pass_info.pass =
+#if (GCC_MAJOR < 5)
+        &pass_gimple_null.pass;
 #else
-    pass_info.pass = new pass_gimple_null(g);
+        new pass_gimple_null(g);
 #endif
     pass_info.reference_pass_name = "early_optimizations";
     pass_info.ref_pass_instance_number = 0;
@@ -2721,17 +2731,18 @@ int __attribute__((visibility("default"))) plugin_init(
     // Leave pass pass_early_local_passes::pass_tree_profile.
 
     // Turn off pass_ipa_increase_alignment.
-#if GCC_MAJOR < 6
-    pass_info.pass = &pass_simple_ipa_null.pass;
+    pass_info.pass =
+#if (GCC_MAJOR < 5)
+        &pass_simple_ipa_null.pass;
 #else
-    pass_info.pass = new pass_simple_ipa_null(g);
+        new pass_simple_ipa_null(g);
 #endif
     pass_info.reference_pass_name = "increase_alignment";
     pass_info.ref_pass_instance_number = 0;
     pass_info.pos_op = PASS_POS_REPLACE;
     register_callback(plugin_name, PLUGIN_PASS_MANAGER_SETUP, NULL, &pass_info);
 
-#if (GCC_MAJOR < 6 && GCC_MINOR < 8)
+#if GCC_VERSION_CODE < GCC_VERSION(4, 8)
     // Turn off pass_ipa_matrix_reorg.
     pass_info.pass = &pass_simple_ipa_null.pass;
     pass_info.reference_pass_name = "matrix-reorg";
@@ -2749,10 +2760,11 @@ int __attribute__((visibility("default"))) plugin_init(
     // Leave pass_ipa_profile. ???
 
     // Turn off pass_ipa_cp.
-#if GCC_MAJOR < 6
-    pass_info.pass = &pass_ipa_null.pass;
+    pass_info.pass =
+#if (GCC_MAJOR < 5)
+        &pass_ipa_null.pass;
 #else
-    pass_info.pass = new pass_ipa_null(g);
+        new pass_ipa_null(g);
 #endif
     pass_info.reference_pass_name = "cp";
     pass_info.ref_pass_instance_number = 0;
@@ -2762,10 +2774,11 @@ int __attribute__((visibility("default"))) plugin_init(
     // Leave pass_ipa_cdtor_merge.
 
     // Turn off pass_ipa_inline.
-#if GCC_MAJOR < 6
-    pass_info.pass = &pass_ipa_null.pass;
+    pass_info.pass =
+#if (GCC_MAJOR < 5)
+        &pass_ipa_null.pass;
 #else
-    pass_info.pass = new pass_ipa_null(g);
+        new pass_ipa_null(g);
 #endif
     pass_info.reference_pass_name = "inline";
     pass_info.ref_pass_instance_number = 0;
@@ -2773,10 +2786,11 @@ int __attribute__((visibility("default"))) plugin_init(
     register_callback(plugin_name, PLUGIN_PASS_MANAGER_SETUP, NULL, &pass_info);
 
     // Turn off pass_ipa_pure_const.
-#if GCC_MAJOR < 6
-    pass_info.pass = &pass_ipa_null.pass;
+    pass_info.pass =
+#if (GCC_MAJOR < 5)
+        &pass_ipa_null.pass;
 #else
-    pass_info.pass = new pass_ipa_null(g);
+        new pass_ipa_null(g);
 #endif
     pass_info.reference_pass_name = "pure-const";
     pass_info.ref_pass_instance_number = 0;
@@ -2784,23 +2798,20 @@ int __attribute__((visibility("default"))) plugin_init(
     register_callback(plugin_name, PLUGIN_PASS_MANAGER_SETUP, NULL, &pass_info);
 
     // Turn off pass_ipa_reference.
-#if GCC_MAJOR < 6
-    pass_info.pass = &pass_ipa_null.pass;
+    pass_info.pass =
+#if (GCC_MAJOR < 5)
+        &pass_ipa_null.pass;
 #else
-    pass_info.pass = new pass_ipa_null(g);
+        new pass_ipa_null(g);
 #endif
     pass_info.reference_pass_name = "static-var";
     pass_info.ref_pass_instance_number = 0;
     pass_info.pos_op = PASS_POS_REPLACE;
     register_callback(plugin_name, PLUGIN_PASS_MANAGER_SETUP, NULL, &pass_info);
 
-#if (GCC_MINOR < 7)
+#if GCC_VERSION_CODE < GCC_VERSION(4, 7)
     // Turn off pass_ipa_type_escape.
-#if GCC_MAJOR < 6
     pass_info.pass = &pass_simple_ipa_null.pass;
-#else
-    pass_info.pass = new pass_simple_ipa_null(g);
-#endif
     pass_info.reference_pass_name = "type-escape-var";
     pass_info.ref_pass_instance_number = 0;
     pass_info.pos_op = PASS_POS_REPLACE;
@@ -2808,23 +2819,20 @@ int __attribute__((visibility("default"))) plugin_init(
 #endif
 
     // Turn off pass_ipa_pta.
-#if GCC_MAJOR < 6
-    pass_info.pass = &pass_simple_ipa_null.pass;
+    pass_info.pass =
+#if (GCC_MAJOR < 5)
+        &pass_simple_ipa_null.pass;
 #else
-    pass_info.pass = new pass_simple_ipa_null(g);
+        new pass_simple_ipa_null(g);
 #endif
     pass_info.reference_pass_name = "pta";
     pass_info.ref_pass_instance_number = 0;
     pass_info.pos_op = PASS_POS_REPLACE;
     register_callback(plugin_name, PLUGIN_PASS_MANAGER_SETUP, NULL, &pass_info);
 
-#if (GCC_MINOR < 7)
+#if GCC_VERSION_CODE < GCC_VERSION(4, 7)
     // Turn off pass_ipa_struct_reorg.
-#if GCC_MAJOR < 6
     pass_info.pass = &pass_simple_ipa_null.pass;
-#else
-    pass_info.pass = new pass_simple_ipa_null(g);
-#endif
     pass_info.reference_pass_name = "ipa_struct_reorg";
     pass_info.ref_pass_instance_number = 0;
     pass_info.pos_op = PASS_POS_REPLACE;
@@ -2833,32 +2841,30 @@ int __attribute__((visibility("default"))) plugin_init(
   }
 
   // Disable all LTO passes.
-#if GCC_MAJOR < 6
-  pass_info.pass = &pass_ipa_null.pass;
+  pass_info.pass =
+#if (GCC_MAJOR < 5)
+      &pass_ipa_null.pass;
 #else
-  pass_info.pass = new pass_ipa_null(g);
+      new pass_ipa_null(g);
 #endif
   pass_info.reference_pass_name = "lto_gimple_out";
   pass_info.ref_pass_instance_number = 0;
   pass_info.pos_op = PASS_POS_REPLACE;
   register_callback(plugin_name, PLUGIN_PASS_MANAGER_SETUP, NULL, &pass_info);
 
-#if GCC_MAJOR < 6
-  pass_info.pass = &pass_ipa_null.pass;
+  pass_info.pass =
+#if (GCC_MAJOR < 5)
+      &pass_ipa_null.pass;
 #else
-  pass_info.pass = new pass_ipa_null(g);
+      new pass_ipa_null(g);
 #endif
   pass_info.reference_pass_name = "lto_decls_out";
   pass_info.ref_pass_instance_number = 0;
   pass_info.pos_op = PASS_POS_REPLACE;
   register_callback(plugin_name, PLUGIN_PASS_MANAGER_SETUP, NULL, &pass_info);
 
-#if (GCC_MINOR < 6)
-#if GCC_MAJOR < 6
+#if GCC_VERSION_CODE < GCC_VERSION(4, 6)
   pass_info.pass = &pass_ipa_null.pass;
-#else
-  pass_info.pass = new pass_ipa_null(g);
-#endif
   pass_info.reference_pass_name = "lto_wpa_fixup";
   pass_info.ref_pass_instance_number = 0;
   pass_info.pos_op = PASS_POS_REPLACE;
@@ -2874,10 +2880,11 @@ int __attribute__((visibility("default"))) plugin_init(
 
   if (!EnableGCCOptimizations) {
     // Disable pass_lower_eh_dispatch.
-#if GCC_MAJOR < 6
-    pass_info.pass = &pass_gimple_null.pass;
+    pass_info.pass =
+#if (GCC_MAJOR < 5)
+        &pass_gimple_null.pass;
 #else
-    pass_info.pass = new pass_gimple_null(g);
+        new pass_gimple_null(g);
 #endif
     pass_info.reference_pass_name = "ehdisp";
     pass_info.ref_pass_instance_number = 0;
@@ -2885,10 +2892,11 @@ int __attribute__((visibility("default"))) plugin_init(
     register_callback(plugin_name, PLUGIN_PASS_MANAGER_SETUP, NULL, &pass_info);
 
     // Disable pass_all_optimizations.
-#if GCC_MAJOR < 6
-    pass_info.pass = &pass_gimple_null.pass;
+    pass_info.pass =
+#if (GCC_MAJOR < 5)
+        &pass_gimple_null.pass;
 #else
-    pass_info.pass = new pass_gimple_null(g);
+        new pass_gimple_null(g);
 #endif
     pass_info.reference_pass_name = "*all_optimizations";
     pass_info.ref_pass_instance_number = 0;
@@ -2898,10 +2906,11 @@ int __attribute__((visibility("default"))) plugin_init(
     // Leave pass_tm_init.
 
     // Disable pass_lower_complex_O0.
-#if GCC_MAJOR < 6
-    pass_info.pass = &pass_gimple_null.pass;
+    pass_info.pass =
+#if (GCC_MAJOR < 5)
+        &pass_gimple_null.pass;
 #else
-    pass_info.pass = new pass_gimple_null(g);
+        new pass_gimple_null(g);
 #endif
     pass_info.reference_pass_name = "cplxlower0";
     pass_info.ref_pass_instance_number = 0;
@@ -2909,10 +2918,11 @@ int __attribute__((visibility("default"))) plugin_init(
     register_callback(plugin_name, PLUGIN_PASS_MANAGER_SETUP, NULL, &pass_info);
 
     // Disable pass_cleanup_eh.
-#if GCC_MAJOR < 6
-    pass_info.pass = &pass_gimple_null.pass;
+    pass_info.pass =
+#if (GCC_MAJOR < 5)
+        &pass_gimple_null.pass;
 #else
-    pass_info.pass = new pass_gimple_null(g);
+        new pass_gimple_null(g);
 #endif
     pass_info.reference_pass_name = "ehcleanup";
     pass_info.ref_pass_instance_number = 0;
@@ -2920,10 +2930,11 @@ int __attribute__((visibility("default"))) plugin_init(
     register_callback(plugin_name, PLUGIN_PASS_MANAGER_SETUP, NULL, &pass_info);
 
     // Disable pass_lower_resx.
-#if GCC_MAJOR < 6
-    pass_info.pass = &pass_gimple_null.pass;
+    pass_info.pass =
+#if (GCC_MAJOR < 5)
+        &pass_gimple_null.pass;
 #else
-    pass_info.pass = new pass_gimple_null(g);
+        new pass_gimple_null(g);
 #endif
     pass_info.reference_pass_name = "resx";
     pass_info.ref_pass_instance_number = 0;
@@ -2931,10 +2942,11 @@ int __attribute__((visibility("default"))) plugin_init(
     register_callback(plugin_name, PLUGIN_PASS_MANAGER_SETUP, NULL, &pass_info);
 
     // Disable pass_nrv.
-#if GCC_MAJOR < 6
-    pass_info.pass = &pass_gimple_null.pass;
+    pass_info.pass =
+#if (GCC_MAJOR < 5)
+        &pass_gimple_null.pass;
 #else
-    pass_info.pass = new pass_gimple_null(g);
+        new pass_gimple_null(g);
 #endif
     pass_info.reference_pass_name = "nrv";
     pass_info.ref_pass_instance_number = 0;
@@ -2942,10 +2954,11 @@ int __attribute__((visibility("default"))) plugin_init(
     register_callback(plugin_name, PLUGIN_PASS_MANAGER_SETUP, NULL, &pass_info);
 
     // Disable pass_mudflap_2. ???
-#if GCC_MAJOR < 6
-    pass_info.pass = &pass_gimple_null.pass;
+    pass_info.pass =
+#if (GCC_MAJOR < 5)
+        &pass_gimple_null.pass;
 #else
-    pass_info.pass = new pass_gimple_null(g);
+        new pass_gimple_null(g);
 #endif
     pass_info.reference_pass_name = "mudflap2";
     pass_info.ref_pass_instance_number = 0;
@@ -2953,10 +2966,11 @@ int __attribute__((visibility("default"))) plugin_init(
     register_callback(plugin_name, PLUGIN_PASS_MANAGER_SETUP, NULL, &pass_info);
 
     // Disable pass_cleanup_cfg_post_optimizing.
-#if GCC_MAJOR < 6
-    pass_info.pass = &pass_gimple_null.pass;
+    pass_info.pass =
+#if (GCC_MAJOR < 5)
+        &pass_gimple_null.pass;
 #else
-    pass_info.pass = new pass_gimple_null(g);
+        new pass_gimple_null(g);
 #endif
     pass_info.reference_pass_name = "optimized";
     pass_info.ref_pass_instance_number = 0;
@@ -2967,10 +2981,11 @@ int __attribute__((visibility("default"))) plugin_init(
   }
 
   // Replace rtl expansion with a pass that converts functions to LLVM IR.
-#if GCC_MAJOR < 6
-  pass_info.pass = &pass_rtl_emit_function.pass;
+  pass_info.pass =
+#if (GCC_MAJOR < 5)
+      &pass_rtl_emit_function.pass;
 #else
-  pass_info.pass = new pass_rtl_emit_function(g);
+      new pass_rtl_emit_function(g);
 #endif
   pass_info.reference_pass_name = "expand";
   pass_info.ref_pass_instance_number = 0;
@@ -2978,17 +2993,14 @@ int __attribute__((visibility("default"))) plugin_init(
   register_callback(plugin_name, PLUGIN_PASS_MANAGER_SETUP, NULL, &pass_info);
 
   // Turn off all other rtl passes.
-#if (GCC_MINOR < 8)
-#if GCC_MAJOR < 6
+#if GCC_VERSION_CODE < GCC_VERSION(4, 8)
   pass_info.pass = &pass_gimple_null.pass;
 #else
-  pass_info.pass = new pass_gimple_null(g);
-#endif
+  pass_info.pass =
+#if (GCC_MAJOR < 5)
+      &pass_rtl_null.pass;
 #else
-#if GCC_MAJOR < 6
-  pass_info.pass = &pass_rtl_null.pass;
-#else
-  pass_info.pass = new pass_rtl_null(g);
+      new pass_rtl_null(g);
 #endif
 #endif
   pass_info.reference_pass_name = "*rest_of_compilation";
@@ -2996,10 +3008,11 @@ int __attribute__((visibility("default"))) plugin_init(
   pass_info.pos_op = PASS_POS_REPLACE;
   register_callback(plugin_name, PLUGIN_PASS_MANAGER_SETUP, NULL, &pass_info);
 
-#if GCC_MAJOR < 6
-  pass_info.pass = &pass_rtl_null.pass;
+  pass_info.pass =
+#if (GCC_MAJOR < 5)
+      &pass_rtl_null.pass;
 #else
-  pass_info.pass = new pass_rtl_null(g);
+      new pass_rtl_null(g);
 #endif
   pass_info.reference_pass_name = "*clean_state";
   pass_info.ref_pass_instance_number = 0;

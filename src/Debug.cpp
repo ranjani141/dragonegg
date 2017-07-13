@@ -924,7 +924,7 @@ DIType DebugInfo::getOrCreateType(tree type) {
   default:
     llvm_unreachable("Unsupported type");
 
-#if (GCC_MINOR > 5)
+#if GCC_VERSION_CODE > GCC_VERSION(4, 5)
   case NULLPTR_TYPE:
 #endif
   case LANG_TYPE: {

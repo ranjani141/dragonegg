@@ -42,6 +42,9 @@
 #  define LLVM_TYPE_Q const
 #endif
 
+#define GCC_VERSION(major, minor) (((major) << 8) | (minor))
+#define GCC_VERSION_CODE GCC_VERSION(GCC_MAJOR, GCC_MINOR)
+
 #if __has_attribute(sentinel) || LLVM_GNUC_PREREQ(3, 0, 0)
 #define LLVM_END_WITH_NULL __attribute__((sentinel))
 #else
@@ -584,7 +587,7 @@ private:
   llvm::Value *EmitReg_TRUNC_DIV_EXPR(tree_node *op0, tree_node *op1,
                                       bool isExact);
   llvm::Value *EmitReg_TRUNC_MOD_EXPR(tree_node *op0, tree_node *op1);
-#if (GCC_MINOR < 7)
+#if GCC_VERSION_CODE < GCC_VERSION(4, 7)
   llvm::Value *EmitReg_VEC_EXTRACT_EVEN_EXPR(tree_node *op0, tree_node *op1);
   llvm::Value *EmitReg_VEC_EXTRACT_ODD_EXPR(tree_node *op0, tree_node *op1);
   llvm::Value *EmitReg_VEC_INTERLEAVE_HIGH_EXPR(tree_node *op0, tree_node *op1);
@@ -603,10 +606,10 @@ private:
 
   // Ternary expressions.
   llvm::Value *EmitReg_CondExpr(tree_node *op0, tree_node *op1, tree_node *op2);
-#if (GCC_MINOR > 5)
+#if GCC_VERSION_CODE > GCC_VERSION(4, 5)
   llvm::Value *EmitReg_FMA_EXPR(tree_node *op0, tree_node *op1, tree_node *op2);
 #endif
-#if (GCC_MINOR > 6)
+#if GCC_VERSION_CODE > GCC_VERSION(4, 6)
   llvm::Value *EmitReg_VEC_PERM_EXPR(tree_node *op0, tree_node *op1,
                                      tree_node *op2);
 #endif
@@ -614,7 +617,7 @@ private:
   llvm::Value *EmitLoadOfLValue(tree_node *exp);
   llvm::Value *EmitOBJ_TYPE_REF(tree_node *exp);
   llvm::Value *EmitADDR_EXPR(tree_node *exp);
-#if (GCC_MINOR < 7)
+#if GCC_VERSION_CODE < GCC_VERSION(4, 7)
   llvm::Value *EmitCondExpr(tree_node *exp);
 #endif
   llvm::Value *EmitCallOf(llvm::Value *Callee, gimple_statement_d *stmt,
@@ -663,7 +666,7 @@ private:
   bool EmitBuiltinAlloca(gimple_statement_d *stmt, llvm::Value *&Result);
   bool EmitBuiltinAllocaWithAlign(gimple_statement_d *stmt,
                                   llvm::Value *&Result);
-#if (GCC_MINOR > 6)
+#if GCC_VERSION_CODE > GCC_VERSION(4, 6)
   bool EmitBuiltinAssumeAligned(gimple_statement_d *stmt, llvm::Value *&Result);
 #endif
   bool EmitBuiltinBZero(gimple_statement_d *stmt, llvm::Value *&Result);
@@ -712,10 +715,10 @@ private:
   LValue EmitLV_COMPONENT_REF(tree_node *exp);
   LValue EmitLV_DECL(tree_node *exp);
   LValue EmitLV_INDIRECT_REF(tree_node *exp);
-#if (GCC_MINOR > 5)
+#if GCC_VERSION_CODE > GCC_VERSION(4, 5)
   LValue EmitLV_MEM_REF(tree_node *exp);
 #endif
-#if (GCC_MINOR < 6)
+#if GCC_VERSION_CODE < GCC_VERSION(4, 6)
   LValue EmitLV_MISALIGNED_INDIRECT_REF(tree_node *exp);
 #endif
   LValue EmitLV_VIEW_CONVERT_EXPR(tree_node *exp);
