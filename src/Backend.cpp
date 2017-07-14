@@ -856,8 +856,10 @@ static void createPerFunctionOptimizationPasses() {
 #if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
     if (TheTarget->addPassesToEmitFile(*PM, FormattedOutStream, CGFT,
                                        DisableVerify))
-      llvm_unreachable("Error interfacing to target machine!");
+#else
+    if (0)
 #endif
+      llvm_unreachable("Error interfacing to target machine!");
   }
 
   PerFunctionPasses->doInitialization();
@@ -928,9 +930,9 @@ static void createPerModuleOptimizationPasses() {
       legacy::PassManager *PM = CodeGenPasses = new legacy::PassManager();
 #else
       PassManager *PM = CodeGenPasses = new PassManager();
-#endif
       // FIXME: https://reviews.llvm.org/D7992
-      //PM->add(new DataLayoutPass());
+      PM->add(new DataLayoutPass());
+#endif
 #if LLVM_VERSION_CODE >= LLVM_VERSION(3, 3) && LLVM_VERSION_CODE <= LLVM_VERSION(3, 6)
       TheTarget->addAnalysisPasses(*PM);
 #endif

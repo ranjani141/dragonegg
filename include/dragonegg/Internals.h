@@ -486,6 +486,17 @@ private:
 
   //===------------------ Render* - Convert GIMPLE to LLVM ----------------===//
 
+#if (GCC_MAJOR > 4)
+  void RenderGIMPLE_ASM(gimple *stmt);
+  void RenderGIMPLE_ASSIGN(gimple *stmt);
+  void RenderGIMPLE_CALL(gimple *stmt);
+  void RenderGIMPLE_COND(gimple *stmt);
+  void RenderGIMPLE_EH_DISPATCH(gimple *stmt);
+  void RenderGIMPLE_GOTO(gimple *stmt);
+  void RenderGIMPLE_RESX(gimple *stmt);
+  void RenderGIMPLE_RETURN(gimple *stmt);
+  void RenderGIMPLE_SWITCH(gimple *stmt);
+#else
   void RenderGIMPLE_ASM(gimple_statement_d *stmt);
   void RenderGIMPLE_ASSIGN(gimple_statement_d *stmt);
   void RenderGIMPLE_CALL(gimple_statement_d *stmt);
@@ -495,6 +506,7 @@ private:
   void RenderGIMPLE_RESX(gimple_statement_d *stmt);
   void RenderGIMPLE_RETURN(gimple_statement_d *stmt);
   void RenderGIMPLE_SWITCH(gimple_statement_d *stmt);
+#endif
 
   // Render helpers.
 
@@ -620,7 +632,12 @@ private:
 #if GCC_VERSION_CODE < GCC_VERSION(4, 7)
   llvm::Value *EmitCondExpr(tree_node *exp);
 #endif
-  llvm::Value *EmitCallOf(llvm::Value *Callee, gimple_statement_d *stmt,
+  llvm::Value *EmitCallOf(llvm::Value *Callee,
+#if (GCC_MAJOR > 4)
+                          gimple *stmt,
+#else
+                          gimple_statement_d *stmt,
+#endif
                           const MemRef *DestLoc, const llvm::AttributeSet &PAL);
   llvm::CallInst *EmitSimpleCall(llvm::StringRef CalleeName,
                                  tree_node *ret_type,
@@ -644,7 +661,12 @@ private:
   // Builtin Function Expansion.
   bool EmitBuiltinCall(gimple_statement_d *stmt, tree_node *fndecl,
                        const MemRef *DestLoc, llvm::Value *&Result);
-  bool EmitFrontendExpandedBuiltinCall(gimple_statement_d *stmt,
+  bool EmitFrontendExpandedBuiltinCall(
+#if (GCC_MAJOR > 4)
+                                       gimple *stmt,
+#else
+                                       gimple_statement_d *stmt,
+#endif
                                        tree_node *fndecl, const MemRef *DestLoc,
                                        llvm::Value *&Result);
   bool EmitBuiltinUnaryOp(llvm::Value *InVal, llvm::Value *&Result,
