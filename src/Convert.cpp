@@ -3452,7 +3452,7 @@ Value *TreeToLLVM::EmitCallOf(Value *Callee,
     PAL = cast<Function>(Callee)->getAttributes();
 
   // Work out whether to use an invoke or an ordinary call.
-  if (!stmt_could_throw_p((gimple *) stmt))
+  if (!stmt_could_throw_p(stmt))
     // This call does not throw - mark it 'nounwind'.
     PAL = PAL.addAttribute(Callee->getContext(), AttributeSet::FunctionIndex,
                            Attribute::NoUnwind);
@@ -3460,7 +3460,7 @@ Value *TreeToLLVM::EmitCallOf(Value *Callee,
   if (!PAL.hasAttribute(AttributeSet::FunctionIndex, Attribute::NoUnwind)) {
     // This call may throw.  Determine if we need to generate
     // an invoke rather than a simple call.
-    LPadNo = lookup_stmt_eh_lp((gimple *) stmt);
+    LPadNo = lookup_stmt_eh_lp(stmt);
 
     if (LPadNo > 0) {
       // The call is in an exception handling region with a landing pad.
@@ -3482,12 +3482,12 @@ Value *TreeToLLVM::EmitCallOf(Value *Callee,
     }
   }
 
-  tree fndecl = gimple_call_fndecl((gimple *) stmt);
+  tree fndecl = gimple_call_fndecl(stmt);
 #if GCC_VERSION_CODE < GCC_VERSION(4, 7)
   tree fntype =
       fndecl ? TREE_TYPE(fndecl) : TREE_TYPE(TREE_TYPE(gimple_call_fn(stmt)));
 #else
-  tree fntype = gimple_call_fntype((gimple *) stmt);
+  tree fntype = gimple_call_fntype(stmt);
 #endif
 
   // Determine the calling convention.
@@ -3502,9 +3502,9 @@ Value *TreeToLLVM::EmitCallOf(Value *Callee,
   FunctionCallArgumentConversion Client(CallOperands, FTy, DestLoc,
                                         gimple_call_return_slot_opt_p(
 #if (GCC_MAJOR > 4)
-                                            (gcall *)
+                                            as_a<gcall *>
 #endif
-                                            stmt),
+                                            (stmt)),
                                         Builder, CallingConvention);
   DefaultABI ABIConverter(Client);
 
@@ -3512,9 +3512,9 @@ Value *TreeToLLVM::EmitCallOf(Value *Callee,
   ABIConverter.HandleReturnType(
                                 gimple_call_return_type(
 #if (GCC_MAJOR > 4)
-                                    (gcall *)
+                                    as_a<gcall *>
 #endif
-                                    stmt),
+                                    (stmt)),
                                 fndecl ? fndecl : fntype,
                                 fndecl ? DECL_BUILT_IN(fndecl) : false);
 
@@ -3523,22 +3523,22 @@ Value *TreeToLLVM::EmitCallOf(Value *Callee,
   if (gimple_call_chain(stmt))
     CallOperands.push_back(EmitMemory(gimple_call_chain(stmt)));
 #else
-  if (gimple_call_chain((gcall *) stmt))
-    CallOperands.push_back(EmitMemory(gimple_call_chain((gcall *) stmt)));
+  if (gimple_call_chain(as_a<gcall *>(stmt)))
+    CallOperands.push_back(EmitMemory(gimple_call_chain(as_a<gcall *>(stmt))));
 #endif
 
   // Loop over the arguments, expanding them and adding them to the op list.
   std::vector<Type *> ScalarArgs;
   for (unsigned i = 0, e = gimple_call_num_args(
 #if (GCC_MAJOR > 4)
-              (gcall *)
+              as_a<gcall *>
 #endif
-              stmt); i != e; ++i) {
+              (stmt)); i != e; ++i) {
     tree arg = gimple_call_arg(
 #if (GCC_MAJOR > 4)
-            (gcall *)
+            as_a<gcall *>
 #endif
-            stmt, i);
+            (stmt), i);
     tree type = TREE_TYPE(arg);
     Type *ArgTy = ConvertType(type);
 
@@ -3636,17 +3636,17 @@ Value *TreeToLLVM::EmitCallOf(Value *Callee,
   // a result, or it does but the result should be discarded.
   if (isa<VOID_TYPE>(gimple_call_return_type(
 #if (GCC_MAJOR > 4)
-                  (gcall *)
+                  as_a<gcall *>
 #endif
-                  stmt)))
+                  (stmt))))
     return 0;
 
   if (Client.isShadowReturn())
     return Client.EmitShadowResult(gimple_call_return_type(
 #if (GCC_MAJOR > 4)
-                (gcall *)
+                as_a<gcall *>
 #endif
-                stmt), DestLoc);
+                (stmt)), DestLoc);
 
   if (Client.isAggrReturn()) {
     MemRef Target;
@@ -3657,9 +3657,9 @@ Value *TreeToLLVM::EmitCallOf(Value *Callee,
       // a temporary then load the value out later.
       Target = CreateTempLoc(ConvertType(gimple_call_return_type(
 #if (GCC_MAJOR > 4)
-                      (gcall *)
+                      as_a<gcall *>
 #endif
-                      stmt)));
+                      (stmt))));
 
     if (DL.getTypeAllocSize(Call->getType()) <=
         DL.getTypeAllocSize(cast<PointerType>(Target.Ptr->getType())
@@ -3683,9 +3683,9 @@ Value *TreeToLLVM::EmitCallOf(Value *Callee,
                          Target.getAlignment(), Target.Volatile),
           gimple_call_return_type(
 #if (GCC_MAJOR > 4)
-              (gcall *)
+              as_a<gcall *>
 #endif
-              stmt));
+              (stmt)));
     }
 
     return DestLoc ? 0 : Builder.CreateLoad(Target.Ptr);
@@ -3694,9 +3694,9 @@ Value *TreeToLLVM::EmitCallOf(Value *Callee,
   if (!DestLoc) {
     Type *RetTy = ConvertType(gimple_call_return_type(
 #if (GCC_MAJOR > 4)
-                (gcall *)
+                as_a<gcall *>
 #endif
-                stmt));
+                (stmt)));
     if (Call->getType() == RetTy)
       return Call; // Normal scalar return.
 
@@ -6996,7 +6996,12 @@ bool TreeToLLVM::EmitBuiltinCall(
     }
 #endif
 
-    bool TreeToLLVM::EmitBuiltinExpect(gimple_statement_d *stmt,
+    bool TreeToLLVM::EmitBuiltinExpect(
+#if (GCC_MAJOR > 4)
+                                       gimple *stmt,
+#else
+                                       gimple_statement_d *stmt,
+#endif
                                        Value * &Result) {
       tree type = gimple_call_return_type(
 #if (GCC_MAJOR > 4)
