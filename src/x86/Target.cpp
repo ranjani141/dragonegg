@@ -52,8 +52,12 @@ extern "C" {
 #endif
 #include "toplev.h"
 
-#if (GCC_MINOR == 6)
+#if (GCC_MAJOR > 4)
+extern void debug_gimple_stmt(gimple *)
+#else
+#if GCC_VERSION_CODE == GCC_VERSION(4, 6)
 extern void debug_gimple_stmt(union gimple_statement_d *);
+#endif
 #endif
 
 #ifndef ENABLE_BUILD_WITH_CXX
@@ -106,9 +110,11 @@ static bool HandlerLT(const HandlerEntry &E, const HandlerEntry &F) {
  * code, emit the code now.  If we can handle the code, this macro should emit
  * the code, return true.
  */
-bool TreeToLLVM::TargetIntrinsicLower(
-    gimple stmt, tree fndecl, const MemRef */*DestLoc*/, Value *&Result,
-    Type *ResultType, std::vector<Value *> &Ops) {
+bool TreeToLLVM::TargetIntrinsicLower(GimpleTy *stmt, tree fndecl,
+                                      const MemRef */*DestLoc*/,
+                                      Value *&Result,
+                                      Type *ResultType,
+                                      std::vector<Value *> &Ops) {
   // DECL_FUNCTION_CODE contains a value of the enumerated type ix86_builtins,
   // declared in i386.c.  If this type was visible to us then we could simply
   // use a switch statement on DECL_FUNCTION_CODE to jump to the right code for

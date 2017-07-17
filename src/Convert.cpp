@@ -1291,11 +1291,7 @@ void TreeToLLVM::PopulatePhiNodes() {
     PhiRecord &P = PendingPhis[Idx];
 
     // Extract the incoming value for each predecessor from the GCC phi node.
-    for (unsigned i = 0, e = gimple_phi_num_args(
-#if (GCC_MAJOR > 4)
-                (const gimple *)
-#endif
-                P.gcc_phi); i != e; ++i) {
+    for (unsigned i = 0, e = gimple_phi_num_args(P.gcc_phi); i != e; ++i) {
       // The incoming GCC basic block.
       basic_block bb = gimple_phi_arg_edge(
 #if (GCC_MAJOR > 4)
@@ -1308,11 +1304,7 @@ void TreeToLLVM::PopulatePhiNodes() {
       assert(BI != BasicBlocks.end() && "GCC basic block not output?");
 
       // The incoming GCC expression.
-      tree val = gimple_phi_arg(
-#if (GCC_MAJOR > 4)
-              (gimple *)
-#endif
-              P.gcc_phi, i)->def;
+      tree val = gimple_phi_arg(P.gcc_phi, i)->def;
 
       // Associate it with the LLVM basic block.
       IncomingValues.push_back(std::make_pair(BI->second, val));
@@ -1342,11 +1334,7 @@ void TreeToLLVM::PopulatePhiNodes() {
     // Get the LLVM predecessors for the basic block containing the phi node,
     // and remember their positions in the list of predecessors (this is used
     // to avoid adding phi operands in a non-deterministic order).
-    Predecessors.reserve(gimple_phi_num_args(
-#if (GCC_MAJOR > 4)
-                (const gimple *)
-#endif
-                P.gcc_phi)); // At least this many.
+    Predecessors.reserve(gimple_phi_num_args(P.gcc_phi)); // At least this many.
     BasicBlock *PhiBB = P.PHI->getParent();
     unsigned Index = 0;
     for (pred_iterator PI = pred_begin(PhiBB), PE = pred_end(PhiBB); PI != PE;
@@ -1591,12 +1579,7 @@ BasicBlock *TreeToLLVM::getBasicBlock(basic_block bb) {
   // use the same naming scheme as GCC.
   if (flag_verbose_asm) {
     // If BB contains labels, name the LLVM basic block after the first label.
-#if (GCC_MAJOR < 5)
-    gimple
-#else
-    gimple *
-#endif
-        stmt = first_stmt(bb);
+    GimpleTy *stmt = first_stmt(bb);
     if (stmt && gimple_code(stmt) == GIMPLE_LABEL) {
       tree label = gimple_label_label(
 #if (GCC_MAJOR > 4)
@@ -1650,12 +1633,7 @@ void TreeToLLVM::EmitBasicBlock(basic_block bb) {
   // the phi uses may not have been defined yet - phis are special this way.
   for (gimple_stmt_iterator gsi = gsi_start_phis(bb); !gsi_end_p(gsi);
        gsi_next(&gsi)) {
-#if (GCC_MAJOR < 5)
-    gimple
-#else
-    gimple *
-#endif
-        gcc_phi = gsi_stmt(gsi);
+    GimpleTy *gcc_phi = gsi_stmt(gsi);
     // Skip virtual operands.
     if (!is_gimple_reg(gimple_phi_result(gcc_phi)))
       continue;
@@ -1679,12 +1657,7 @@ void TreeToLLVM::EmitBasicBlock(basic_block bb) {
   // Render statements.
   for (gimple_stmt_iterator gsi = gsi_start_bb(bb); !gsi_end_p(gsi);
        gsi_next(&gsi)) {
-#if (GCC_MAJOR < 5)
-    gimple
-#else
-    gimple *
-#endif
-        stmt = gsi_stmt(gsi);
+    GimpleTy *stmt = gsi_stmt(gsi);
     input_location = gimple_location(stmt);
     ++NumStatements;
 
@@ -3441,12 +3414,7 @@ struct FunctionCallArgumentConversion : public DefaultABIClient {
 /// EmitCallOf - Emit a call to the specified callee with the operands specified
 /// in the GIMPLE_CALL 'stmt'. If the result of the call is a scalar, return the
 /// result, otherwise store it in DestLoc.
-Value *TreeToLLVM::EmitCallOf(Value *Callee,
-#if (GCC_MAJOR > 4)
-                              gimple *stmt,
-#else
-                              gimple stmt,
-#endif
+Value *TreeToLLVM::EmitCallOf(Value *Callee, GimpleTy *stmt,
                               const MemRef *DestLoc, const AttributeSet &InPAL) {
   BasicBlock *LandingPad = 0; // Non-zero indicates an invoke.
   int LPadNo = 0;
@@ -3513,8 +3481,7 @@ Value *TreeToLLVM::EmitCallOf(Value *Callee,
   DefaultABI ABIConverter(Client);
 
   // Handle the result, including struct returns.
-  ABIConverter.HandleReturnType(
-                                gimple_call_return_type(
+  ABIConverter.HandleReturnType(gimple_call_return_type(
 #if (GCC_MAJOR > 4)
                                     as_a<gcall *>
 #endif
@@ -3906,13 +3873,7 @@ void TreeToLLVM::EmitModifyOfRegisterVariable(tree decl, Value *RHS) {
 ///       punctuation.
 /// Other %xN expressions are turned into LLVM ${N:x} operands.
 ///
-static std::string ConvertInlineAsmStr(
-#if (GCC_MAJOR > 4)
-                                       gimple *stmt,
-#else
-                                       gimple stmt,
-#endif
-                                       unsigned NumOperands) {
+static std::string ConvertInlineAsmStr(GimpleTy *stmt, unsigned NumOperands) {
   const char *AsmStr = 
 #if (GCC_MAJOR < 5)
       gimple_asm_string(stmt);
@@ -4018,13 +3979,7 @@ static std::string ConvertInlineAsmStr(
 /// isOperandMentioned - Return true if the given operand is explicitly
 /// mentioned in the asm string.  For example if passed operand 1 then
 /// this routine checks that the asm string does not contain "%1".
-static bool isOperandMentioned(
-#if (GCC_MAJOR > 4)
-                               gimple *stmt,
-#else
-                               gimple stmt,
-#endif
-                               unsigned OpNum) {
+static bool isOperandMentioned(GimpleTy *stmt, unsigned OpNum) {
   // If this is a non-extended ASM then the contents of the asm string are not
   // to be interpreted.
 #if (GCC_MAJOR < 5)
@@ -4243,13 +4198,7 @@ static int MatchWeight(const char *Constraint, tree Operand) {
 /// gcc's algorithm for picking "the best" tuple is quite complicated, and
 /// is performed after things like SROA, not before.  At the moment we are
 /// just trying to pick one that will work.  This may get refined.
-static void ChooseConstraintTuple(
-#if (GCC_MAJOR > 4)
-                                  gimple *stmt,
-#else
-                                  gimple stmt,
-#endif
-                                  const char **Constraints,
+static void ChooseConstraintTuple(GimpleTy *stmt, const char **Constraints,
                                   unsigned NumChoices,
                                   BumpPtrAllocator &StringStorage) {
 #if (GCC_MAJOR < 5)
@@ -4450,13 +4399,7 @@ Value *TreeToLLVM::BuildVectorShuffle(Value *InVec1, Value *InVec2, ...) {
 ///
 /// This method returns true if the builtin is handled, otherwise false.
 ///
-bool TreeToLLVM::EmitFrontendExpandedBuiltinCall(
-#if (GCC_MAJOR > 4)
-                                                 gimple *stmt,
-#else
-                                                 gimple stmt,
-#endif
-                                                 tree fndecl,
+bool TreeToLLVM::EmitFrontendExpandedBuiltinCall(GimpleTy *stmt, tree fndecl,
                                                  const MemRef *DestLoc,
                                                  Value *&Result) {
 #ifdef LLVM_TARGET_INTRINSIC_LOWER
@@ -4498,13 +4441,7 @@ bool TreeToLLVM::EmitFrontendExpandedBuiltinCall(
 /// builtin number.
 static std::vector<Constant *> TargetBuiltinCache;
 
-Value *TreeToLLVM::BuildBinaryAtomic(
-#if (GCC_MAJOR > 4)
-                                     gimple *stmt,
-#else
-                                     gimple stmt,
-#endif
-                                     AtomicRMWInst::BinOp Kind,
+Value *TreeToLLVM::BuildBinaryAtomic(GimpleTy *stmt, AtomicRMWInst::BinOp Kind,
                                      unsigned PostOp) {
   tree return_type = gimple_call_return_type(
 #if (GCC_MAJOR > 4)
@@ -4537,14 +4474,7 @@ Value *TreeToLLVM::BuildBinaryAtomic(
 }
 
 Value *
-TreeToLLVM::BuildCmpAndSwapAtomic(
-#if (GCC_MAJOR > 4)
-                                  gimple *stmt,
-#else
-                                  gimple stmt,
-#endif
-                                  unsigned Bits,
-                                  bool isBool) {
+TreeToLLVM::BuildCmpAndSwapAtomic(GimpleTy *stmt, unsigned Bits, bool isBool) {
 #if (GCC_MAJOR < 5)
   tree ptr = gimple_call_arg(stmt, 0);
   tree old_val = gimple_call_arg(stmt, 1);
@@ -4591,13 +4521,7 @@ TreeToLLVM::BuildCmpAndSwapAtomic(
 /// EmitBuiltinCall - stmt is a call to fndecl, a builtin function.  Try to emit
 /// the call in a special way, setting Result to the scalar result if necessary.
 /// If we can't handle the builtin, return false, otherwise return true.
-bool TreeToLLVM::EmitBuiltinCall(
-#if (GCC_MAJOR > 4)
-                                 gimple *stmt,
-#else
-                                 gimple stmt,
-#endif
-                                 tree fndecl,
+bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
                                  const MemRef *DestLoc, Value *&Result) {
   if (DECL_BUILT_IN_CLASS(fndecl) == BUILT_IN_MD) {
     unsigned FnCode = DECL_FUNCTION_CODE(fndecl);
@@ -5643,12 +5567,7 @@ bool TreeToLLVM::EmitBuiltinCall(
       return true;
     }
 
-    Value *TreeToLLVM::EmitBuiltinBitCountIntrinsic(
-#if (GCC_MAJOR > 4)
-                                                    gimple *stmt,
-#else
-                                                    gimple stmt,
-#endif
+    Value *TreeToLLVM::EmitBuiltinBitCountIntrinsic(GimpleTy *stmt,
                                                     Intrinsic::ID Id) {
       Value *Amt = EmitMemory(gimple_call_arg(
 #if (GCC_MAJOR > 4)
@@ -5675,13 +5594,7 @@ bool TreeToLLVM::EmitBuiltinCall(
           Result, DestTy, /*isSigned*/ !TYPE_UNSIGNED(return_type), "cast");
     }
 
-    Value *TreeToLLVM::EmitBuiltinSQRT(
-#if (GCC_MAJOR > 4)
-                                       gimple *stmt
-#else
-                                       gimple stmt
-#endif
-                                       ) {
+    Value *TreeToLLVM::EmitBuiltinSQRT(GimpleTy *stmt) {
       Value *Amt = EmitMemory(gimple_call_arg(
 #if (GCC_MAJOR > 4)
                   as_a<gcall *>
@@ -5693,13 +5606,7 @@ bool TreeToLLVM::EmitBuiltinCall(
           Intrinsic::getDeclaration(TheModule, Intrinsic::sqrt, Ty), Amt);
     }
 
-    Value *TreeToLLVM::EmitBuiltinPOWI(
-#if (GCC_MAJOR > 4)
-                                       gimple *stmt
-#else
-                                       gimple stmt
-#endif                     
-                                       ) {
+    Value *TreeToLLVM::EmitBuiltinPOWI(GimpleTy *stmt) {
       if (!validate_gimple_arglist(
 #if (GCC_MAJOR > 4)
                   as_a<gcall *>
@@ -5728,13 +5635,7 @@ bool TreeToLLVM::EmitBuiltinCall(
           Intrinsic::getDeclaration(TheModule, Intrinsic::powi, Ty), Args);
     }
 
-    Value *TreeToLLVM::EmitBuiltinPOW(
-#if (GCC_MAJOR > 4)
-                                      gimple *stmt
-#else
-                                      gimple stmt
-#endif
-                                      ) {
+    Value *TreeToLLVM::EmitBuiltinPOW(GimpleTy *stmt) {
       if (!validate_gimple_arglist(
 #if (GCC_MAJOR > 4)
                   as_a<gcall *>
@@ -5761,13 +5662,7 @@ bool TreeToLLVM::EmitBuiltinCall(
           Intrinsic::getDeclaration(TheModule, Intrinsic::pow, Ty), Args);
     }
 
-    Value *TreeToLLVM::EmitBuiltinLCEIL(
-#if (GCC_MAJOR > 4)
-                                        gimple *stmt
-#else
-                                        gimple stmt
-#endif
-                                        ) {
+    Value *TreeToLLVM::EmitBuiltinLCEIL(GimpleTy *stmt) {
       if (!validate_gimple_arglist(
 #if (GCC_MAJOR > 4)
                   as_a<gcall *>
@@ -5799,13 +5694,7 @@ bool TreeToLLVM::EmitBuiltinCall(
                                  : Builder.CreateFPToSI(Call, RetTy);
     }
 
-    Value *TreeToLLVM::EmitBuiltinLFLOOR(
-#if (GCC_MAJOR > 4)
-                                         gimple *stmt
-#else
-                                         gimple stmt
-#endif
-                                         ) {
+    Value *TreeToLLVM::EmitBuiltinLFLOOR(GimpleTy *stmt) {
       if (!validate_gimple_arglist(
 #if (GCC_MAJOR > 4)
                   as_a<gcall *>
@@ -5837,13 +5726,7 @@ bool TreeToLLVM::EmitBuiltinCall(
                                  : Builder.CreateFPToSI(Call, RetTy);
     }
 
-    Value *TreeToLLVM::EmitBuiltinLROUND(
-#if (GCC_MAJOR > 4)
-                                         gimple *stmt
-#else
-                                         gimple stmt
-#endif
-                                         ) {
+    Value *TreeToLLVM::EmitBuiltinLROUND(GimpleTy *stmt) {
       if (!validate_gimple_arglist(
 #if (GCC_MAJOR > 4)
                   as_a<gcall *>
@@ -5875,13 +5758,7 @@ bool TreeToLLVM::EmitBuiltinCall(
       return Builder.CreateTrunc(Call, RetTy);
     }
 
-    Value *TreeToLLVM::EmitBuiltinCEXPI(
-#if (GCC_MAJOR > 4)
-                                        gimple *stmt
-#else
-                                        gimple stmt
-#endif
-                                        ) {
+    Value *TreeToLLVM::EmitBuiltinCEXPI(GimpleTy *stmt) {
       if (!validate_gimple_arglist(
 #if (GCC_MAJOR > 4)
                   as_a<gcall *>
@@ -6056,13 +5933,7 @@ bool TreeToLLVM::EmitBuiltinCall(
       }
     }
 
-    Value *TreeToLLVM::EmitBuiltinSIGNBIT(
-#if (GCC_MAJOR > 4)
-                                          gimple *stmt
-#else
-                                          gimple stmt
-#endif
-                                          ) {
+    Value *TreeToLLVM::EmitBuiltinSIGNBIT(GimpleTy *stmt) {
       Value *Arg = EmitRegister(gimple_call_arg(
 #if (GCC_MAJOR > 4)
                   as_a<gcall *>
@@ -6082,13 +5953,7 @@ bool TreeToLLVM::EmitBuiltinCall(
                                         (stmt))));
     }
 
-    bool TreeToLLVM::EmitBuiltinConstantP(
-#if (GCC_MAJOR > 4)
-                                          gimple *stmt,
-#else
-                                          gimple stmt,
-#endif
-                                          Value * &Result) {
+    bool TreeToLLVM::EmitBuiltinConstantP(GimpleTy *stmt, Value * &Result) {
       Result =
           Constant::getNullValue(ConvertType(gimple_call_return_type(
 #if (GCC_MAJOR > 4)
@@ -6098,13 +5963,7 @@ bool TreeToLLVM::EmitBuiltinCall(
       return true;
     }
 
-    bool TreeToLLVM::EmitBuiltinExtendPointer(
-#if (GCC_MAJOR > 4)
-                                              gimple *stmt,
-#else
-                                              gimple stmt,
-#endif
-                                              Value * &Result) {
+    bool TreeToLLVM::EmitBuiltinExtendPointer(GimpleTy *stmt, Value * &Result) {
       tree arg0 = gimple_call_arg(
 #if (GCC_MAJOR > 4)
               as_a<gcall *>
@@ -6132,13 +5991,7 @@ bool TreeToLLVM::EmitBuiltinCall(
     /// size checking builtin calls (e.g. __builtin___memcpy_chk into the
     /// plain non-checking calls. If the size of the argument is either -1 (unknown)
     /// or large enough to ensure no overflow (> len), then it's safe to do so.
-    static bool OptimizeIntoPlainBuiltIn(
-#if (GCC_MAJOR > 4)
-                                         gimple *stmt,
-#else
-                                         gimple stmt,
-#endif
-                                         Value * Len,
+    static bool OptimizeIntoPlainBuiltIn(GimpleTy *stmt, Value * Len,
                                          Value * Size) {
       if (BitCastInst *SizeBC = llvm::dyn_cast<BitCastInst>(Size))
         Size = SizeBC->getOperand(0);
@@ -6168,13 +6021,7 @@ bool TreeToLLVM::EmitBuiltinCall(
 
     /// EmitBuiltinMemCopy - Emit an llvm.memcpy or llvm.memmove intrinsic,
     /// depending on the value of isMemMove.
-    bool TreeToLLVM::EmitBuiltinMemCopy(
-#if (GCC_MAJOR > 4)
-                                        gimple *stmt,
-#else
-                                        gimple stmt,
-#endif
-                                        Value * &Result,
+    bool TreeToLLVM::EmitBuiltinMemCopy(GimpleTy *stmt, Value * &Result,
                                         bool isMemMove, bool SizeCheck) {
       if (SizeCheck) {
         if (!validate_gimple_arglist(
@@ -6231,13 +6078,7 @@ bool TreeToLLVM::EmitBuiltinCall(
       return true;
     }
 
-    bool TreeToLLVM::EmitBuiltinMemSet(
-#if (GCC_MAJOR > 4)
-                                       gimple *stmt,
-#else
-                                       gimple stmt,
-#endif
-                                       Value * &Result,
+    bool TreeToLLVM::EmitBuiltinMemSet(GimpleTy *stmt, Value * &Result,
                                        bool SizeCheck) {
       if (SizeCheck) {
         if (!validate_gimple_arglist(
@@ -6289,13 +6130,7 @@ bool TreeToLLVM::EmitBuiltinCall(
       return true;
     }
 
-    bool TreeToLLVM::EmitBuiltinBZero(
-#if (GCC_MAJOR > 4)
-                                      gimple *stmt,
-#else
-                                      gimple stmt,
-#endif
-                                      Value * &/*Result*/) {
+    bool TreeToLLVM::EmitBuiltinBZero(GimpleTy *stmt, Value * &/*Result*/) {
       if (!validate_gimple_arglist(
 #if (GCC_MAJOR > 4)
                   as_a<gcall *>
@@ -6321,13 +6156,7 @@ bool TreeToLLVM::EmitBuiltinCall(
       return true;
     }
 
-    bool TreeToLLVM::EmitBuiltinPrefetch(
-#if (GCC_MAJOR > 4)
-                                         gimple *stmt
-#else
-                                         gimple stmt
-#endif
-                                         ) {
+    bool TreeToLLVM::EmitBuiltinPrefetch(GimpleTy *stmt) {
       if (!validate_gimple_arglist(
 #if (GCC_MAJOR > 4)
                   as_a<gcall *>
@@ -6417,13 +6246,7 @@ bool TreeToLLVM::EmitBuiltinCall(
 
     /// EmitBuiltinReturnAddr - Emit an llvm.returnaddress or llvm.frameaddress
     /// instruction, depending on whether isFrame is true or not.
-    bool TreeToLLVM::EmitBuiltinReturnAddr(
-#if (GCC_MAJOR > 4)
-                                           gimple *stmt,
-#else
-                                           gimple stmt,
-#endif
-                                           Value * &Result,
+    bool TreeToLLVM::EmitBuiltinReturnAddr(GimpleTy *stmt, Value * &Result,
                                            bool isFrame) {
       if (!validate_gimple_arglist(
 #if (GCC_MAJOR > 4)
@@ -6459,12 +6282,7 @@ bool TreeToLLVM::EmitBuiltinCall(
       return true;
     }
 
-    bool TreeToLLVM::EmitBuiltinExtractReturnAddr(
-#if (GCC_MAJOR > 4)
-                                                  gimple *stmt,
-#else
-                                                  gimple stmt,
-#endif
+    bool TreeToLLVM::EmitBuiltinExtractReturnAddr(GimpleTy *stmt,
                                                   Value * &Result) {
       Value *Ptr = EmitMemory(gimple_call_arg(
 #if (GCC_MAJOR > 4)
@@ -6484,12 +6302,7 @@ bool TreeToLLVM::EmitBuiltinCall(
       return true;
     }
 
-    bool TreeToLLVM::EmitBuiltinFrobReturnAddr(
-#if (GCC_MAJOR > 4)
-                                               gimple *stmt,
-#else
-                                               gimple stmt,
-#endif
+    bool TreeToLLVM::EmitBuiltinFrobReturnAddr(GimpleTy *stmt,
                                                Value * &Result) {
       Value *Ptr = EmitMemory(gimple_call_arg(
 #if (GCC_MAJOR > 4)
@@ -6508,13 +6321,7 @@ bool TreeToLLVM::EmitBuiltinCall(
       return true;
     }
 
-    bool TreeToLLVM::EmitBuiltinStackSave(
-#if (GCC_MAJOR > 4)
-                                          gimple *stmt,
-#else
-                                          gimple stmt,
-#endif
-                                          Value * &Result) {
+    bool TreeToLLVM::EmitBuiltinStackSave(GimpleTy *stmt, Value * &Result) {
       if (!validate_gimple_arglist(
 #if (GCC_MAJOR > 4)
                   as_a<gcall *>
@@ -6534,13 +6341,7 @@ bool TreeToLLVM::EmitBuiltinCall(
 
     // Exception handling builtins.
 
-    bool TreeToLLVM::EmitBuiltinEHCopyValues(
-#if (GCC_MAJOR > 4)
-                                             gimple *stmt
-#else
-                                             gimple stmt
-#endif
-                                             ) {
+    bool TreeToLLVM::EmitBuiltinEHCopyValues(GimpleTy *stmt) {
       unsigned DstRegionNo =
 #if (GCC_MAJOR > 4)
           tree_to_shwi(gimple_call_arg(as_a<gcall *>(stmt), 0));
@@ -6562,13 +6363,7 @@ bool TreeToLLVM::EmitBuiltinCall(
       return true;
     }
 
-    bool TreeToLLVM::EmitBuiltinEHFilter(
-#if (GCC_MAJOR > 4)
-                                         gimple *stmt,
-#else
-                                         gimple stmt,
-#endif
-                                         Value * &Result) {
+    bool TreeToLLVM::EmitBuiltinEHFilter(GimpleTy *stmt, Value * &Result) {
       // Lookup the local that holds the selector value for this region.
       unsigned RegionNo =
 #if (GCC_MAJOR > 4)
@@ -6590,13 +6385,7 @@ bool TreeToLLVM::EmitBuiltinCall(
       return true;
     }
 
-    bool TreeToLLVM::EmitBuiltinEHPointer(
-#if (GCC_MAJOR > 4)
-                                          gimple *stmt,
-#else
-                                          gimple stmt,
-#endif
-                                          Value * &Result) {
+    bool TreeToLLVM::EmitBuiltinEHPointer(GimpleTy *stmt, Value * &Result) {
       // Lookup the local that holds the exception pointer for this region.
       unsigned RegionNo =
 #if (GCC_MAJOR > 4)
@@ -6643,13 +6432,7 @@ bool TreeToLLVM::EmitBuiltinCall(
 #define HARD_REGNO_CALL_PART_CLOBBERED(REGNO, MODE) 0
 #endif
 
-    bool TreeToLLVM::EmitBuiltinDwarfCFA(
-#if (GCC_MAJOR > 4)
-                                         gimple *stmt,
-#else
-                                         gimple stmt,
-#endif
-                                         Value * &Result) {
+    bool TreeToLLVM::EmitBuiltinDwarfCFA(GimpleTy *stmt, Value * &Result) {
       if (!validate_gimple_arglist(
 #if (GCC_MAJOR > 4)
                   as_a<gcall *>
@@ -6667,12 +6450,7 @@ bool TreeToLLVM::EmitBuiltinCall(
       return true;
     }
 
-    bool TreeToLLVM::EmitBuiltinDwarfSPColumn(
-#if (GCC_MAJOR > 4)
-                                              gimple *stmt,
-#else
-                                              gimple stmt,
-#endif
+    bool TreeToLLVM::EmitBuiltinDwarfSPColumn(GimpleTy *stmt,
                                               Value * &Result) {
       if (!validate_gimple_arglist(
 #if (GCC_MAJOR > 4)
@@ -6692,12 +6470,7 @@ bool TreeToLLVM::EmitBuiltinCall(
       return true;
     }
 
-    bool TreeToLLVM::EmitBuiltinEHReturnDataRegno(
-#if (GCC_MAJOR > 4)
-                                                  gimple *stmt,
-#else
-                                                  gimple stmt,
-#endif
+    bool TreeToLLVM::EmitBuiltinEHReturnDataRegno(GimpleTy *stmt,
                                                   Value * &Result) {
 #ifdef EH_RETURN_DATA_REGNO
       if (!validate_gimple_arglist(
@@ -6742,13 +6515,7 @@ bool TreeToLLVM::EmitBuiltinCall(
       return true;
     }
 
-    bool TreeToLLVM::EmitBuiltinEHReturn(
-#if (GCC_MAJOR > 4)
-                                         gimple *stmt,
-#else
-                                         gimple stmt,
-#endif
-                                         Value * &/*Result*/) {
+    bool TreeToLLVM::EmitBuiltinEHReturn(GimpleTy *stmt, Value * &/*Result*/) {
       if (!validate_gimple_arglist(
 #if (GCC_MAJOR > 4)
                   as_a<gcall *>
@@ -6782,12 +6549,7 @@ bool TreeToLLVM::EmitBuiltinCall(
       return true;
     }
 
-    bool TreeToLLVM::EmitBuiltinInitDwarfRegSizes(
-#if (GCC_MAJOR > 4)
-                                                  gimple *stmt,
-#else
-                                                  gimple stmt,
-#endif
+    bool TreeToLLVM::EmitBuiltinInitDwarfRegSizes(GimpleTy *stmt,
                                                   Value * &/*Result*/) {
 #ifdef DWARF2_UNWIND_INFO
       unsigned int i;
@@ -6864,12 +6626,7 @@ bool TreeToLLVM::EmitBuiltinCall(
       return true;
     }
 
-    bool TreeToLLVM::EmitBuiltinUnwindInit(
-#if (GCC_MAJOR > 4)
-                                           gimple *stmt,
-#else
-                                           gimple stmt,
-#endif
+    bool TreeToLLVM::EmitBuiltinUnwindInit(GimpleTy *stmt,
                                            Value * &/*Result*/) {
       if (!validate_gimple_arglist(
 #if (GCC_MAJOR > 4)
@@ -6884,13 +6641,7 @@ bool TreeToLLVM::EmitBuiltinCall(
       return true;
     }
 
-    bool TreeToLLVM::EmitBuiltinStackRestore(
-#if (GCC_MAJOR > 4)
-                                             gimple *stmt
-#else
-                                             gimple stmt
-#endif                           
-                                             ) {
+    bool TreeToLLVM::EmitBuiltinStackRestore(GimpleTy *stmt) {
       if (!validate_gimple_arglist(
 #if (GCC_MAJOR > 4)
                   as_a<gcall *>
@@ -6910,13 +6661,7 @@ bool TreeToLLVM::EmitBuiltinCall(
       return true;
     }
 
-    bool TreeToLLVM::EmitBuiltinAlloca(
-#if (GCC_MAJOR > 4)
-                                       gimple *stmt,
-#else
-                                       gimple stmt,
-#endif
-                                       Value * &Result) {
+    bool TreeToLLVM::EmitBuiltinAlloca(GimpleTy *stmt, Value * &Result) {
       if (!validate_gimple_arglist(
 #if (GCC_MAJOR > 4)
                   as_a<gcall *>
@@ -6934,12 +6679,7 @@ bool TreeToLLVM::EmitBuiltinCall(
       return true;
     }
 
-    bool TreeToLLVM::EmitBuiltinAllocaWithAlign(
-#if (GCC_MAJOR > 4)
-                                                gimple *stmt,
-#else
-                                                gimple stmt,
-#endif
+    bool TreeToLLVM::EmitBuiltinAllocaWithAlign(GimpleTy *stmt,
                                                 Value * &Result) {
       if (!validate_gimple_arglist(
 #if (GCC_MAJOR > 4)
@@ -6964,12 +6704,7 @@ bool TreeToLLVM::EmitBuiltinCall(
     }
 
 #if GCC_VERSION_CODE > GCC_VERSION(4, 6)
-    bool TreeToLLVM::EmitBuiltinAssumeAligned(
-#if (GCC_MAJOR > 4)
-                                              gimple *stmt,
-#else
-                                              gimple stmt,
-#endif
+    bool TreeToLLVM::EmitBuiltinAssumeAligned(GimpleTy *stmt,
                                               Value * &Result) {
       if (!validate_gimple_arglist(
 #if (GCC_MAJOR > 4)
@@ -7000,13 +6735,7 @@ bool TreeToLLVM::EmitBuiltinCall(
     }
 #endif
 
-    bool TreeToLLVM::EmitBuiltinExpect(
-#if (GCC_MAJOR > 4)
-                                       gimple *stmt,
-#else
-                                       gimple stmt,
-#endif
-                                       Value * &Result) {
+    bool TreeToLLVM::EmitBuiltinExpect(GimpleTy *stmt, Value * &Result) {
       tree type = gimple_call_return_type(
 #if (GCC_MAJOR > 4)
               as_a<gcall *>
@@ -7043,13 +6772,7 @@ bool TreeToLLVM::EmitBuiltinCall(
       return true;
     }
 
-    bool TreeToLLVM::EmitBuiltinVAStart(
-#if (GCC_MAJOR > 4)
-                                        gimple *stmt
-#else
-                                        gimple stmt
-#endif
-                                        ) {
+    bool TreeToLLVM::EmitBuiltinVAStart(GimpleTy *stmt) {
       if (gimple_call_num_args(
 #if (GCC_MAJOR > 4)
                   as_a<gcall *>
@@ -7078,13 +6801,7 @@ bool TreeToLLVM::EmitBuiltinCall(
       return true;
     }
 
-    bool TreeToLLVM::EmitBuiltinVAEnd(
-#if (GCC_MAJOR > 4)
-                                      gimple *stmt
-#else
-                                      gimple stmt
-#endif
-                                      ) {
+    bool TreeToLLVM::EmitBuiltinVAEnd(GimpleTy *stmt) {
       Value *Arg = EmitMemory(gimple_call_arg(
 #if (GCC_MAJOR > 4)
                   as_a<gcall *>
@@ -7096,13 +6813,7 @@ bool TreeToLLVM::EmitBuiltinCall(
       return true;
     }
 
-    bool TreeToLLVM::EmitBuiltinVACopy(
-#if (GCC_MAJOR > 4)
-                                       gimple *stmt
-#else
-                                       gimple stmt
-#endif
-                                       ) {
+    bool TreeToLLVM::EmitBuiltinVACopy(GimpleTy *stmt) {
       tree Arg1T = gimple_call_arg(
 #if (GCC_MAJOR > 4)
               as_a<gcall *>
@@ -7141,12 +6852,7 @@ bool TreeToLLVM::EmitBuiltinCall(
       return true;
     }
 
-    bool TreeToLLVM::EmitBuiltinAdjustTrampoline(
-#if (GCC_MAJOR > 4)
-                                                 gimple *stmt,
-#else
-                                                 gimple stmt,
-#endif
+    bool TreeToLLVM::EmitBuiltinAdjustTrampoline(GimpleTy *stmt,
                                                  Value * &Result) {
       if (!validate_gimple_arglist(
 #if (GCC_MAJOR > 4)
@@ -7167,13 +6873,7 @@ bool TreeToLLVM::EmitBuiltinCall(
       return true;
     }
 
-    bool TreeToLLVM::EmitBuiltinInitTrampoline(
-#if (GCC_MAJOR > 4)
-                                               gimple *stmt,
-#else
-                                               gimple stmt,
-#endif
-                                               bool OnStack) {
+    bool TreeToLLVM::EmitBuiltinInitTrampoline(GimpleTy *stmt, bool OnStack) {
       if (!validate_gimple_arglist(
 #if (GCC_MAJOR > 4)
                   as_a<gcall *>
@@ -9274,11 +8974,7 @@ bool TreeToLLVM::EmitBuiltinCall(
     //                  ... Render* - Convert GIMPLE to LLVM ...
     //===----------------------------------------------------------------------===//
 
-#if (GCC_MAJOR > 4)
-    void TreeToLLVM::RenderGIMPLE_ASM(gimple *stmt) {
-#else
-    void TreeToLLVM::RenderGIMPLE_ASM(gimple stmt) {
-#endif
+    void TreeToLLVM::RenderGIMPLE_ASM(GimpleTy *stmt) {
       // A gimple asm statement consists of an asm string, a list of outputs, a list
       // of inputs, a list of clobbers, a list of labels and a "volatile" flag.
       // These correspond directly to the elements of an asm statement.  For example
@@ -9927,16 +9623,14 @@ bool TreeToLLVM::EmitBuiltinCall(
       // Give the backend a chance to upgrade the inline asm to LLVM code.  This
       // handles some common cases that LLVM has intrinsics for, e.g. x86 bswap ->
       // llvm.bswap.
+#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
       if (const TargetLowering *TLI =
 	  TheTarget->getSubtargetImpl()->getTargetLowering())
         TLI->ExpandInlineAsm(CV);
+#endif
     }
 
-#if (GCC_MAJOR > 4)
-    void TreeToLLVM::RenderGIMPLE_ASSIGN(gimple *stmt) {
-#else
-    void TreeToLLVM::RenderGIMPLE_ASSIGN(gimple stmt) {
-#endif
+    void TreeToLLVM::RenderGIMPLE_ASSIGN(GimpleTy *stmt) {
       tree lhs = gimple_assign_lhs(stmt);
 
 #if (GCC_MAJOR < 5 && GCC_MINOR > 6)
@@ -9974,22 +9668,26 @@ bool TreeToLLVM::EmitBuiltinCall(
       WriteScalarToLHS(lhs, EmitAssignRHS(stmt));
     }
 
-#if (GCC_MAJOR > 4)
-    void TreeToLLVM::RenderGIMPLE_CALL(gimple *stmt) {
-#else
-    void TreeToLLVM::RenderGIMPLE_CALL(gimple stmt) {
-#endif
+    void TreeToLLVM::RenderGIMPLE_CALL(GimpleTy *stmt) {
       tree lhs = gimple_call_lhs(stmt);
       if (!lhs) {
         // The returned value is not used.
-        if (!isa<AGGREGATE_TYPE>(gimple_call_return_type(stmt))) {
+        if (!isa<AGGREGATE_TYPE>(gimple_call_return_type(
+#if (GCC_MAJOR > 4)
+                        as_a<gcall *>
+#endif
+                        (stmt)))) {
           OutputCallRHS(stmt, 0);
           return;
         }
         // Create a temporary to hold the returned value.
         // TODO: Figure out how to avoid creating this temporary and the
         // associated useless code that stores the returned value into it.
-        MemRef Loc = CreateTempLoc(ConvertType(gimple_call_return_type(stmt)));
+        MemRef Loc = CreateTempLoc(ConvertType(gimple_call_return_type(
+#if (GCC_MAJOR > 4)
+                        as_a<gcall *>
+#endif
+                        (stmt))));
         OutputCallRHS(stmt, &Loc);
         return;
       }
@@ -10003,11 +9701,7 @@ bool TreeToLLVM::EmitBuiltinCall(
       WriteScalarToLHS(lhs, OutputCallRHS(stmt, 0));
     }
 
-#if (GCC_MAJOR > 4)
-    void TreeToLLVM::RenderGIMPLE_COND(gimple *stmt) {
-#else
-    void TreeToLLVM::RenderGIMPLE_COND(gimple stmt) {
-#endif
+    void TreeToLLVM::RenderGIMPLE_COND(GimpleTy *stmt) {
       // Emit the comparison.
       Value *Cond = EmitCompare(gimple_cond_lhs(stmt), gimple_cond_rhs(stmt),
                                 gimple_cond_code(stmt));
@@ -10023,12 +9717,12 @@ bool TreeToLLVM::EmitBuiltinCall(
       Builder.CreateCondBr(Cond, IfTrue, IfFalse);
     }
 
+    void TreeToLLVM::RenderGIMPLE_EH_DISPATCH(GimpleTy *stmt) {
+      int RegionNo = gimple_eh_dispatch_region(
 #if (GCC_MAJOR > 4)
-    void TreeToLLVM::RenderGIMPLE_EH_DISPATCH(gimple *stmt) {
-#else
-    void TreeToLLVM::RenderGIMPLE_EH_DISPATCH(gimple stmt) {
+              as_a<geh_dispatch *>
 #endif
-      int RegionNo = gimple_eh_dispatch_region(stmt);
+              (stmt));
       eh_region region = get_eh_region_from_number(RegionNo);
 
       switch (region->type) {
@@ -10108,11 +9802,7 @@ bool TreeToLLVM::EmitBuiltinCall(
       }
     }
 
-#if (GCC_MAJOR > 4)
-    void TreeToLLVM::RenderGIMPLE_GOTO(gimple *stmt) {
-#else
-    void TreeToLLVM::RenderGIMPLE_GOTO(gimple stmt) {
-#endif
+    void TreeToLLVM::RenderGIMPLE_GOTO(GimpleTy *stmt) {
       tree dest = gimple_goto_dest(stmt);
 
       if (isa<LABEL_DECL>(dest)) {
@@ -10133,20 +9823,18 @@ bool TreeToLLVM::EmitBuiltinCall(
           Br->addDestination(getBasicBlock(e->dest));
     }
 
-    void TreeToLLVM::RenderGIMPLE_RESX(
-#if (GCC_MAJOR > 4)
-                                       gimple *stmt
-#else
-                                       gimple stmt
-#endif
-                                       ) {
+    void TreeToLLVM::RenderGIMPLE_RESX(GimpleTy *stmt) {
       // Reraise an exception.  If this statement is inside an exception handling
       // region then the reraised exception may be caught by the current function,
       // in which case it can be simplified into a branch.
       int DstLPadNo = lookup_stmt_eh_lp(stmt);
       eh_region dst_rgn =
           DstLPadNo ? get_eh_region_from_lp_number(DstLPadNo) : NULL;
-      eh_region src_rgn = get_eh_region_from_number(gimple_resx_region(stmt));
+      eh_region src_rgn = get_eh_region_from_number(gimple_resx_region(
+#if (GCC_MAJOR > 4)
+                  as_a<gresx *>
+#endif
+                  (stmt)));
 
       if (!src_rgn) {
         // Unreachable block?
@@ -10191,12 +9879,12 @@ bool TreeToLLVM::EmitBuiltinCall(
       Builder.CreateResume(UnwindData);
     }
 
+    void TreeToLLVM::RenderGIMPLE_RETURN(GimpleTy *stmt) {
+      tree retval = gimple_return_retval(
 #if (GCC_MAJOR > 4)
-    void TreeToLLVM::RenderGIMPLE_RETURN(gimple *stmt) {
-#else
-    void TreeToLLVM::RenderGIMPLE_RETURN(gimple stmt) {
+              as_a<greturn *>
 #endif
-      tree retval = gimple_return_retval(stmt);
+              (stmt));
       tree result = DECL_RESULT(current_function_decl);
 
       if (retval && retval != error_mark_node && retval != result) {
@@ -10219,25 +9907,45 @@ bool TreeToLLVM::EmitBuiltinCall(
       Builder.CreateBr(ReturnBB);
     }
 
-#if (GCC_MAJOR > 4)
-    void TreeToLLVM::RenderGIMPLE_SWITCH(gimple *stmt) {
-#else
-    void TreeToLLVM::RenderGIMPLE_SWITCH(gimple stmt) {
-#endif
+    void TreeToLLVM::RenderGIMPLE_SWITCH(GimpleTy *stmt) {
       // Emit the condition.
-      Value *Index = EmitRegister(gimple_switch_index(stmt));
-      tree index_type = TREE_TYPE(gimple_switch_index(stmt));
+      Value *Index = EmitRegister(gimple_switch_index(
+#if (GCC_MAJOR > 4)
+                  as_a<gswitch *>
+#endif
+                  (stmt)));
+      tree index_type = TREE_TYPE(gimple_switch_index(
+#if (GCC_MAJOR > 4)
+                  as_a<gswitch *>
+#endif
+                  (stmt)));
 
       // Create the switch instruction.
-      tree default_label = CASE_LABEL(gimple_switch_label(stmt, 0));
+      tree default_label = CASE_LABEL(gimple_switch_label(
+#if (GCC_MAJOR > 4)
+                  as_a<gswitch *>
+#endif
+                  (stmt), 0));
       SwitchInst *SI =
           Builder.CreateSwitch(Index, getLabelDeclBlock(default_label),
-                               gimple_switch_num_labels(stmt));
+                               gimple_switch_num_labels(
+#if (GCC_MAJOR > 4)
+                                   as_a<gswitch *>
+#endif
+                                   (stmt)));
 
       // Add the switch cases.
       BasicBlock *IfBlock = 0; // Set if a range was output as an "if".
-      for (unsigned i = 1, e = gimple_switch_num_labels(stmt); i != e; ++i) {
-        tree label = gimple_switch_label(stmt, i);
+      for (unsigned i = 1, e = gimple_switch_num_labels(
+#if (GCC_MAJOR > 4)
+                  as_a<gswitch *>
+#endif
+                  (stmt)); i != e; ++i) {
+        tree label = gimple_switch_label(
+#if (GCC_MAJOR > 4)
+                as_a<gswitch *>
+#endif
+                (stmt), i);
         BasicBlock *Dest = getLabelDeclBlock(CASE_LABEL(label));
 
         // Convert the integer to the right type.
@@ -10291,11 +9999,7 @@ bool TreeToLLVM::EmitBuiltinCall(
     //===----------------------------------------------------------------------===//
 
     /// EmitAssignRHS - Convert the RHS of a scalar GIMPLE_ASSIGN to LLVM.
-#if (GCC_MAJOR > 4)
-    Value *TreeToLLVM::EmitAssignRHS(gimple *stmt) {
-#else
-    Value *TreeToLLVM::EmitAssignRHS(gimple stmt) {
-#endif
+    Value *TreeToLLVM::EmitAssignRHS(GimpleTy *stmt) {
       // Loads from memory and other non-register expressions are handled by
       // EmitAssignSingleRHS.
       if (get_gimple_rhs_class(gimple_expr_code(stmt)) == GIMPLE_SINGLE_RHS) {
@@ -10474,16 +10178,20 @@ bool TreeToLLVM::EmitBuiltinCall(
         RHS = EmitReg_VEC_INTERLEAVE_LOW_EXPR(rhs1, rhs2);
         break;
 #endif
+#if (GCC_MAJOR < 5)
       case VEC_LSHIFT_EXPR:
         RHS = EmitReg_VecShiftOp(rhs1, rhs2, /*isLeftShift*/ true);
         break;
+#endif
       case VEC_PACK_FIX_TRUNC_EXPR:
       case VEC_PACK_TRUNC_EXPR:
         RHS = EmitReg_VEC_PACK_TRUNC_EXPR(type, rhs1, rhs2);
         break;
+#if (GCC_MAJOR < 5)
       case VEC_RSHIFT_EXPR:
         RHS = EmitReg_VecShiftOp(rhs1, rhs2, /*isLeftShift*/ false);
         break;
+#endif
       case VEC_UNPACK_FLOAT_HI_EXPR:
       case VEC_UNPACK_HI_EXPR:
         RHS = EmitReg_VecUnpackHiExpr(type, rhs1);
@@ -10535,7 +10243,7 @@ bool TreeToLLVM::EmitBuiltinCall(
         // Expressions (tcc_expression).
       case ADDR_EXPR:
         return EmitADDR_EXPR(rhs);
-#if (GCC_MINOR < 7)
+#if GCC_VERSION_CODE < GCC_VERSION(4, 7)
       case COND_EXPR:
       case VEC_COND_EXPR:
         return EmitCondExpr(rhs);
@@ -10556,10 +10264,10 @@ bool TreeToLLVM::EmitBuiltinCall(
       case COMPONENT_REF:
       case IMAGPART_EXPR:
       case INDIRECT_REF:
-#if (GCC_MINOR > 5)
+#if GCC_VERSION_CODE > GCC_VERSION(4, 5)
       case MEM_REF:
 #endif
-#if (GCC_MINOR < 6)
+#if GCC_VERSION_CODE < GCC_VERSION(4, 6)
       case MISALIGNED_INDIRECT_REF:
 #endif
       case REALPART_EXPR:
@@ -10580,13 +10288,7 @@ bool TreeToLLVM::EmitBuiltinCall(
     }
 
     /// OutputCallRHS - Convert the RHS of a GIMPLE_CALL.
-    Value *TreeToLLVM::OutputCallRHS(
-#if (GCC_MAJOR > 4)
-                                     gimple *stmt,
-#else
-                                     gimple stmt,
-#endif
-                                     const MemRef * DestLoc) {
+    Value *TreeToLLVM::OutputCallRHS(GimpleTy *stmt, const MemRef * DestLoc) {
       // Check for a built-in function call.  If we can lower it directly, do so
       // now.
       tree fndecl = gimple_call_fndecl(stmt);
@@ -10594,10 +10296,18 @@ bool TreeToLLVM::EmitBuiltinCall(
           DECL_BUILT_IN_CLASS(fndecl) != BUILT_IN_FRONTEND) {
         Value *Res = 0;
         if (EmitBuiltinCall(stmt, fndecl, DestLoc, Res))
-          return Res ? Mem2Reg(Res, gimple_call_return_type(stmt), Builder) : 0;
+          return Res ? Mem2Reg(Res, gimple_call_return_type(
+#if (GCC_MAJOR > 4)
+                      as_a<gcall *>
+#endif
+                      (stmt)), Builder) : 0;
       }
 
-      tree call_expr = gimple_call_fn(stmt);
+      tree call_expr = gimple_call_fn(
+#if (GCC_MAJOR > 4)
+              as_a<gcall *>
+#endif
+              (stmt));
       assert(TREE_TYPE(call_expr) &&
              (isa<POINTER_TYPE>(TREE_TYPE(call_expr)) ||
               isa<REFERENCE_TYPE>(TREE_TYPE(call_expr))) &&
@@ -10645,7 +10355,11 @@ bool TreeToLLVM::EmitBuiltinCall(
         BeginBlock(BasicBlock::Create(Context));
       }
 
-      return Result ? Mem2Reg(Result, gimple_call_return_type(stmt), Builder)
+      return Result ? Mem2Reg(Result, gimple_call_return_type(
+#if (GCC_MAJOR > 4)
+                  as_a<gcall *>
+#endif
+                  (stmt)), Builder)
                     : 0;
     }
 
