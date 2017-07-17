@@ -165,7 +165,12 @@ public:
 
   /// getOrCreateType - Get the type from the cache or create a new type if
   /// necessary.
-  llvm::DIType getOrCreateType(tree_node *type);
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+  llvm::DITypeRef
+#else
+  llvm::DIType
+#endif
+      getOrCreateType(tree_node *type);
 
   /// createBasicType - Create BasicType.
   llvm::DIType createBasicType(tree_node *type);
@@ -192,7 +197,12 @@ public:
   void getOrCreateCompileUnit(const char *FullPath, bool isMain = false);
 
   /// getOrCreateFile - Get DIFile descriptor.
-  llvm::DIFile getOrCreateFile(const char *FullPath);
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+  llvm::DIFile *
+#else
+  llvm::DIFile
+#endif
+      getOrCreateFile(const char *FullPath);
 
   /// findRegion - Find tree_node N's region.
   llvm::DIDescriptor findRegion(tree_node *n);
@@ -230,17 +240,34 @@ private:
   /// CreateSubprogram - Create a new descriptor for the specified subprogram.
   /// See comments in DISubprogram for descriptions of these fields.
   llvm::DISubprogram CreateSubprogram(
-      llvm::DIDescriptor Context, llvm::StringRef Name,
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      llvm::DIScope *Context,
+#else
+      llvm::DIDescriptor Context,
+#endif
+      llvm::StringRef Name,
       llvm::StringRef DisplayName, llvm::StringRef LinkageName, llvm::DIFile F,
-      unsigned LineNo, llvm::DIType Ty, bool isLocalToUnit, bool isDefinition,
+      unsigned LineNo,
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      llvm::DITypeRef Ty,
+#else
+      llvm::DIType Ty,
+#endif
+      bool isLocalToUnit, bool isDefinition,
       llvm::DIType ContainingType, unsigned VK = 0, unsigned VIndex = 0,
       unsigned Flags = 0, bool isOptimized = false, llvm::Function *Fn = 0);
 
   /// CreateSubprogramDefinition - Create new subprogram descriptor for the
   /// given declaration.
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+  llvm::DISubprogram *
+  CreateSubprogramDefinition(llvm::DISubprogram *SPDeclaration,
+                             unsigned LineNo, llvm::Function *Fn);
+#else
   llvm::DISubprogram
   CreateSubprogramDefinition(llvm::DISubprogram &SPDeclaration,
                              unsigned LineNo, llvm::Function *Fn);
+#endif
 
   /// InsertDeclare - Insert a new llvm.dbg.declare intrinsic call.
   llvm::Instruction *

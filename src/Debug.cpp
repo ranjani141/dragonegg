@@ -198,7 +198,11 @@ static StringRef getLinkageName(tree Node) {
   tree decl_name = DECL_NAME(Node);
   if (decl_name != NULL && IDENTIFIER_POINTER(decl_name) != NULL) {
     if (TREE_PUBLIC(Node) && DECL_ASSEMBLER_NAME(Node) != DECL_NAME(Node) &&
+#if (GCC_MAJOR > 4)
+        !DECL_ABSTRACT_P(Node)) {
+#else
         !DECL_ABSTRACT(Node)) {
+#endif
       return StringRef(IDENTIFIER_POINTER(DECL_ASSEMBLER_NAME(Node)));
     }
   }
@@ -231,12 +235,21 @@ StringRef DebugInfo::getFunctionName(tree FnDecl) {
 
 /// EmitFunctionStart - Constructs the debug code for entering a function.
 void DebugInfo::EmitFunctionStart(tree FnDecl, Function *Fn) {
-  DIType FNType = getOrCreateType(TREE_TYPE(FnDecl));
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+  DITypeRef
+#else
+  DIType
+#endif
+      FNType = getOrCreateType(TREE_TYPE(FnDecl));
 
   unsigned lineno = CurLineNo;
 
   std::map<tree_node *, WeakVH>::iterator I = SPCache.find(FnDecl);
   if (I != SPCache.end()) {
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+    DISubprogram *SPDecl = llvm::getDISubprogram(cast<MDNode>(I->second));
+    DISubprogram *SP = CreateSubprogramDefinition(SPDecl, lineno, Fn);
+#else
     DISubprogram SPDecl(cast<MDNode>(I->second));
     DISubprogram SP = CreateSubprogramDefinition(SPDecl, lineno, Fn);
     SPDecl->replaceAllUsesWith(SP);
@@ -244,6 +257,7 @@ void DebugInfo::EmitFunctionStart(tree FnDecl, Function *Fn) {
     // Push function on region stack.
     RegionStack.push_back(WeakVH(SP));
     RegionMap[FnDecl] = WeakVH(SP);
+#endif
     return;
   }
 
@@ -254,9 +268,13 @@ void DebugInfo::EmitFunctionStart(tree FnDecl, Function *Fn) {
       DECL_ABSTRACT_ORIGIN(FnDecl) != FnDecl)
     ArtificialFnWithAbstractOrigin = true;
 
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+  DIScope *SPContext = nullptr;
+#else
   DIDescriptor SPContext =
       ArtificialFnWithAbstractOrigin ? getOrCreateFile(main_input_filename)
                                      : findRegion(DECL_CONTEXT(FnDecl));
+#endif
 
   // Creating context may have triggered creation of this SP descriptor. So
   // check the cache again.
@@ -894,14 +912,23 @@ DIType DebugInfo::createVariantType(tree type, DIType MainTy) {
 
 /// getOrCreateType - Get the type from the cache or create a new type if
 /// necessary.
-DIType DebugInfo::getOrCreateType(tree type) {
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+DITypeRef
+#else
+DIType
+#endif
+DebugInfo::getOrCreateType(tree type) {
   if (type == NULL_TREE || type == error_mark_node)
     llvm_unreachable("Not a type.");
 
   // Should only be void if a pointer/reference/return type.  Returning NULL
   // allows the caller to produce a non-derived type.
   if (isa<VOID_TYPE>(type))
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+    return DITypeRef();
+#else
     return DIType();
+#endif
 
   // Check to see if the compile unit already has created this type.
   std::map<tree_node *, WeakVH>::iterator I = TypeCache.find(type);
@@ -1038,7 +1065,12 @@ void DebugInfo::getOrCreateCompileUnit(const char *FullPath, bool isMain) {
 }
 
 /// getOrCreateFile - Get DIFile descriptor.
-DIFile DebugInfo::getOrCreateFile(const char *FullPath) {
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+DIFile *
+#else
+DIFile
+#endif
+DebugInfo::getOrCreateFile(const char *FullPath) {
   if (!FullPath)
     FullPath = main_input_filename;
   if (!strcmp(FullPath, ""))
@@ -1123,11 +1155,26 @@ DICompositeType DebugInfo::CreateCompositeType(
 /// See comments in DISubprogram for descriptions of these fields.  This
 /// method does not unique the generated descriptors.
 DISubprogram DebugInfo::CreateSubprogram(
-    DIDescriptor Context, StringRef Name, StringRef DisplayName,
-    StringRef LinkageName, DIFile F, unsigned LineNo, DIType Ty,
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+    DIScope *Context,
+#else
+    DIDescriptor Context,
+#endif
+    StringRef Name, StringRef DisplayName,
+    StringRef LinkageName, DIFile F, unsigned LineNo,
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+    DITypeRef Ty,
+#else
+    DIType Ty,
+#endif
     bool isLocalToUnit, bool isDefinition, DIType ContainingType, unsigned VK,
     unsigned VIndex, unsigned Flags, bool isOptimized, Function *Fn) {
-  DICompositeType CTy = getDICompositeType(Ty);
+  DICompositeType CTy =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      dyn_cast<DICompositeType>(Ty);
+#else
+      getDICompositeType(Ty);
+#endif
   assert(CTy.Verify() && "Expected a composite type!");
   if (ContainingType.isValid() || VK || VIndex)
     return Builder.createMethod(Context, Name, LinkageName, F, LineNo, CTy,
@@ -1142,6 +1189,14 @@ DISubprogram DebugInfo::CreateSubprogram(
 /// CreateSubprogramDefinition - Create new subprogram descriptor for the
 /// given declaration.
 DISubprogram DebugInfo::CreateSubprogramDefinition(
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+    DISubprogram *SP, unsigned LineNo, Function *Fn) {
+  
+  return Builder.createFile(SP->getScope(), SP->getName(), SP->getLinkageName(),
+      SP->getFile(), SP->getLineNumber(), SP->getType(), SP->isLocalToUnit(),
+      true, LineNo, SP->getFlags(), SP->isOptimized(), Fn,
+      SP->getTemplateParams(), SP);
+#else
     DISubprogram &SP, unsigned LineNo, Function *Fn) {
   if (SP.isDefinition())
     return DISubprogram(SP);
@@ -1152,6 +1207,7 @@ DISubprogram DebugInfo::CreateSubprogramDefinition(
       SP.getLineNumber(), SP.getType(), SP.isLocalToUnit(), true, LineNo,
       SP.getFlags(), SP.isOptimized(), Fn, SP.getTemplateParams(), SP);
 }
+#endif
 
 //===----------------------------------------------------------------------===//
 // Routines for inserting code into a function
