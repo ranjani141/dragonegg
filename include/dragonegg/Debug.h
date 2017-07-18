@@ -35,6 +35,24 @@
 // System headers
 #include <map>
 
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+typedef llvm::DIType * MigDIType;
+typedef llvm::DIScope * MigDIScope;
+typedef llvm::DINamespace * MigDINamespace;
+typedef llvm::DISubprogram * MigDISubprogram;
+typedef llvm::DIFile * MigDIFile;
+typedef llvm::DINodeArray MigDINodeArray;
+typedef llvm::DICompositeType * MigDICompositeType;
+#else
+typedef llvm::DIType MigDIType;
+typedef llvm::DIDescriptor MigDIScope;
+typedef llvm::DINameSpace MigDINamespace;
+typedef llvm::DISubprogram MigDISubprogram;
+typedef llvm::DIFile MigDIFile;
+typedef llvm::DIArray MigDINodeArray;
+typedef llvm::DICompositeType MigDICompositeType;
+#endif
+
 // Forward declarations
 namespace llvm {
 class AllocaInst;
@@ -42,55 +60,6 @@ class BasicBlock;
 class CallInst;
 class Function;
 class Module;
-
-#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-/// DIDescriptor - A thin wraper around MDNode to access encoded debug info.
-/// This should not be stored in a container, because underly MDNode may
-/// change in certain situations.
-class DIDescriptor {
-protected:
-  MDNode *DbgNode;
-
-  /// DIDescriptor constructor.  If the specified node is non-null, check
-  /// to make sure that the tag in the descriptor matches 'RequiredTag'.  If
-  /// not, the debug info is corrupt and we ignore it.
-  DIDescriptor(MDNode *N, unsigned RequiredTag);
-
-  StringRef getStringField(unsigned Elt) const;
-  unsigned getUnsignedField(unsigned Elt) const {
-    return (unsigned)getUInt64Field(Elt);
-  }
-  uint64_t getUInt64Field(unsigned Elt) const;
-  DIDescriptor getDescriptorField(unsigned Elt) const;
-
-  template <typename DescTy>
-  DescTy getFieldAs(unsigned Elt) const {
-    return DescTy(getDescriptorField(Elt).getNode());
-  }
-
-  GlobalVariable *getGlobalVariableField(unsigned Elt) const;
-
-public:
-  explicit DIDescriptor() : DbgNode(0) {}
-  explicit DIDescriptor(MDNode *N) : DbgNode(N) {}
-
-  bool isNull() const { return DbgNode == 0; }
-
-  MDNode *getNode() const { return DbgNode; }
-};
-
-/// DIArray - This descriptor holds an array of descriptors.
-class DIArray : public DIDescriptor {
-public:
-  explicit DIArray(MDNode *N = 0)
-    : DIDescriptor(N) {}
-
-  unsigned getNumElements() const;
-  DIDescriptor getElement(unsigned Idx) const {
-    return getDescriptorField(Idx);
-  }
-};
-#endif
 }
 
 /// DebugInfo - This class gathers all debug information during compilation and
@@ -165,59 +134,40 @@ public:
 
   /// getOrCreateType - Get the type from the cache or create a new type if
   /// necessary.
-#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-  llvm::DIType *
-#else
-  llvm::DIType
-#endif
-      getOrCreateType(tree_node *type);
+  MigDIType getOrCreateType(tree_node *type);
 
   /// createBasicType - Create BasicType.
-  llvm::DIType createBasicType(tree_node *type);
+  MigDIType createBasicType(tree_node *type);
 
   /// createMethodType - Create MethodType.
-  llvm::DIType createMethodType(tree_node *type);
+  MigDIType createMethodType(tree_node *type);
 
   /// createPointerType - Create PointerType.
-  llvm::DIType createPointerType(tree_node *type);
+  MigDIType createPointerType(tree_node *type);
 
   /// createArrayType - Create ArrayType.
-  llvm::DIType createArrayType(tree_node *type);
+  MigDIType createArrayType(tree_node *type);
 
   /// createEnumType - Create EnumType.
-  llvm::DIType createEnumType(tree_node *type);
+  MigDIType createEnumType(tree_node *type);
 
   /// createStructType - Create StructType for struct or union or class.
-  llvm::DIType createStructType(tree_node *type);
+  MigDIType createStructType(tree_node *type);
 
   /// createVarinatType - Create variant type or return MainTy.
-  llvm::DIType createVariantType(tree_node *type, llvm::DIType MainTy);
+  MigDIType createVariantType(tree_node *type, MigDIType MainTy);
 
   /// getOrCreateCompileUnit - Create a new compile unit.
   void getOrCreateCompileUnit(const char *FullPath, bool isMain = false);
 
   /// getOrCreateFile - Get DIFile descriptor.
-#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-  llvm::DIFile *
-#else
-  llvm::DIFile
-#endif
-      getOrCreateFile(const char *FullPath);
+  MigDIFile getOrCreateFile(const char *FullPath);
 
   /// findRegion - Find tree_node N's region.
-#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-  llvm::DIScope *
-#else
-  llvm::DIDescriptor
-#endif
-      findRegion(tree_node *n);
+  MigDIScope findRegion(tree_node *n);
 
   /// getOrCreateNameSpace - Get name space descriptor for the tree node.
-#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-  llvm::DINamespace *getOrCreateNameSpace(tree_node *Node, llvm::DIScope *Context);
-#else
-  llvm::DINameSpace getOrCreateNameSpace(tree_node *Node, llvm::DIDescriptor Context);
-#endif
+  MigDINamespace getOrCreateNameSpace(tree_node *Node, MigDIScope Context);
 
   /// getFunctionName - Get function name for the given FnDecl. If the
   /// name is constructred on demand (e.g. C++ destructor) then the name
@@ -227,65 +177,45 @@ public:
 private:
   /// CreateDerivedType - Create a derived type like const qualified type,
   /// pointer, typedef, etc.
-  llvm::DIDerivedType CreateDerivedType(
-      unsigned Tag, llvm::DIDescriptor Context, llvm::StringRef Name,
-      llvm::DIFile F, unsigned LineNumber, uint64_t SizeInBits,
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+  llvm::DIDerivedType *
+#else
+  llvm::DIDerivedType
+#endif
+      CreateDerivedType(
+      unsigned Tag, MigDIScope Context, llvm::StringRef Name,
+      MigDIFile F, unsigned LineNumber, uint64_t SizeInBits,
       uint64_t AlignInBits, uint64_t OffsetInBits, unsigned Flags,
-      llvm::DIType DerivedFrom);
+      MigDIType DerivedFrom);
 
   /// CreateCompositeType - Create a composite type like array, struct, etc.
-  llvm::DICompositeType CreateCompositeType(
-      unsigned Tag, llvm::DIDescriptor Context, llvm::StringRef Name,
-      llvm::DIFile F, unsigned LineNumber, uint64_t SizeInBits,
+  MigDICompositeType CreateCompositeType(
+      unsigned Tag, MigDIScope Context, llvm::StringRef Name,
+      MigDIFile F, unsigned LineNumber, uint64_t SizeInBits,
       uint64_t AlignInBits, uint64_t OffsetInBits, unsigned Flags,
-      llvm::DIType DerivedFrom, llvm::DIArray Elements,
+      MigDIType DerivedFrom, MigDINodeArray Elements,
       unsigned RunTimeLang = 0, llvm::MDNode *ContainingType = 0);
 
   /// CreateSubprogram - Create a new descriptor for the specified subprogram.
   /// See comments in DISubprogram for descriptions of these fields.
-#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-  llvm::DISubprogram *
-#else
-  llvm::DISubprogram
-#endif
-      CreateSubprogram(
-#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-      llvm::DIScope *Context,
-#else
-      llvm::DIDescriptor Context,
-#endif
-      llvm::StringRef Name, llvm::StringRef DisplayName,
-      llvm::StringRef LinkageName,
-#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-      llvm::DIFile *F,
-#else
-      llvm::DIFile F,
-#endif
-      unsigned LineNo,
-#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-      llvm::DIType *Ty,
-#else
-      llvm::DIType Ty,
-#endif
-      bool isLocalToUnit, bool isDefinition,
-#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-      llvm::DIType ContainingType,
-#endif
-      unsigned VK = 0, unsigned VIndex = 0, unsigned Flags = 0,
-      bool isOptimized = false, llvm::Function *Fn = 0);
+  MigDISubprogram CreateSubprogram(MigDIScope Context, llvm::StringRef Name,
+      llvm::StringRef DisplayName, llvm::StringRef LinkageName, MigDIFile F,
+      unsigned LineNo, MigDIType Ty, bool isLocalToUnit, bool isDefinition,
+      MigDIType ContainingType, unsigned VK = 0, unsigned VIndex = 0,
+      unsigned Flags = 0, bool isOptimized = false, llvm::Function *Fn = 0);
 
   /// CreateSubprogramDefinition - Create new subprogram descriptor for the
   /// given declaration.
+  MigDISubprogram
+  CreateSubprogramDefinition(
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-  llvm::DISubprogram *
-  CreateSubprogramDefinition(llvm::DISubprogram *SPDeclaration,
-                             unsigned LineNo, llvm::Function *Fn);
+                             llvm::DISubprogram *SPDeclaration,
 #else
-  llvm::DISubprogram
-  CreateSubprogramDefinition(llvm::DISubprogram &SPDeclaration,
-                             unsigned LineNo, llvm::Function *Fn);
+                             llvm::DISubprogram &SPDeclaration,
 #endif
+                             unsigned LineNo, llvm::Function *Fn);
 
+#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
   /// InsertDeclare - Insert a new llvm.dbg.declare intrinsic call.
   llvm::Instruction *
   InsertDeclare(llvm::Value *Storage, llvm::DIVariable D,
@@ -305,6 +235,7 @@ private:
   llvm::Instruction *InsertDbgValueIntrinsic(llvm::Value *V, uint64_t Offset,
                                              llvm::DIVariable D,
                                              llvm::Instruction *InsertBefore);
+#endif
 };
 
 #endif /* DRAGONEGG_DEBUG_H */
