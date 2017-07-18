@@ -166,7 +166,7 @@ public:
   /// getOrCreateType - Get the type from the cache or create a new type if
   /// necessary.
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-  llvm::DITypeRef
+  llvm::DIType *
 #else
   llvm::DIType
 #endif
@@ -205,15 +205,19 @@ public:
       getOrCreateFile(const char *FullPath);
 
   /// findRegion - Find tree_node N's region.
-  llvm::DIDescriptor findRegion(tree_node *n);
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+  llvm::DIScope *
+#else
+  llvm::DIDescriptor
+#endif
+      findRegion(tree_node *n);
 
   /// getOrCreateNameSpace - Get name space descriptor for the tree node.
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-  llvm::DINamespace
+  llvm::DINamespace *getOrCreateNameSpace(tree_node *Node, llvm::DIScope *Context);
 #else
-  llvm::DINameSpace
+  llvm::DINameSpace getOrCreateNameSpace(tree_node *Node, llvm::DIDescriptor Context);
 #endif
-         getOrCreateNameSpace(tree_node *Node, llvm::DIDescriptor Context);
 
   /// getFunctionName - Get function name for the given FnDecl. If the
   /// name is constructred on demand (e.g. C++ destructor) then the name
@@ -239,23 +243,36 @@ private:
 
   /// CreateSubprogram - Create a new descriptor for the specified subprogram.
   /// See comments in DISubprogram for descriptions of these fields.
-  llvm::DISubprogram CreateSubprogram(
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+  llvm::DISubprogram *
+#else
+  llvm::DISubprogram
+#endif
+      CreateSubprogram(
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
       llvm::DIScope *Context,
 #else
       llvm::DIDescriptor Context,
 #endif
-      llvm::StringRef Name,
-      llvm::StringRef DisplayName, llvm::StringRef LinkageName, llvm::DIFile F,
+      llvm::StringRef Name, llvm::StringRef DisplayName,
+      llvm::StringRef LinkageName,
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      llvm::DIFile *F,
+#else
+      llvm::DIFile F,
+#endif
       unsigned LineNo,
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-      llvm::DITypeRef Ty,
+      llvm::DIType *Ty,
 #else
       llvm::DIType Ty,
 #endif
       bool isLocalToUnit, bool isDefinition,
-      llvm::DIType ContainingType, unsigned VK = 0, unsigned VIndex = 0,
-      unsigned Flags = 0, bool isOptimized = false, llvm::Function *Fn = 0);
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      llvm::DIType ContainingType,
+#endif
+      unsigned VK = 0, unsigned VIndex = 0, unsigned Flags = 0,
+      bool isOptimized = false, llvm::Function *Fn = 0);
 
   /// CreateSubprogramDefinition - Create new subprogram descriptor for the
   /// given declaration.

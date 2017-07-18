@@ -25,6 +25,10 @@
 
 // LLVM headers
 #include "llvm/IR/Module.h"
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+#include "llvm/Transforms/Utils/Local.h"
+#include "llvm/IR/IntrinsicInst.h"
+#endif
 
 // System headers
 #include <gmp.h>
@@ -236,7 +240,7 @@ StringRef DebugInfo::getFunctionName(tree FnDecl) {
 /// EmitFunctionStart - Constructs the debug code for entering a function.
 void DebugInfo::EmitFunctionStart(tree FnDecl, Function *Fn) {
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-  DITypeRef
+  DIType *
 #else
   DIType
 #endif
@@ -252,10 +256,15 @@ void DebugInfo::EmitFunctionStart(tree FnDecl, Function *Fn) {
 #else
     DISubprogram SPDecl(cast<MDNode>(I->second));
     DISubprogram SP = CreateSubprogramDefinition(SPDecl, lineno, Fn);
+#endif
     SPDecl->replaceAllUsesWith(SP);
 
     // Push function on region stack.
-    RegionStack.push_back(WeakVH(SP));
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+    RegionStack.push_back(WeakVH(dyn_cast_or_null<Value>(SP)));
+    RegionMap[FnDecl] = WeakVH(dyn_cast_or_null<Value>(SP));
+#else
+    RegionStack.push_back(SP);
     RegionMap[FnDecl] = WeakVH(SP);
 #endif
     return;
@@ -280,13 +289,23 @@ void DebugInfo::EmitFunctionStart(tree FnDecl, Function *Fn) {
   // check the cache again.
   I = SPCache.find(FnDecl);
   if (I != SPCache.end()) {
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+    DISubprogram *SPDecl = llvm::getDISubprogram(cast<MDNode>(I->second));
+    DISubprogram *SP = CreateSubprogramDefinition(SPDecl, lineno, Fn);
+#else
     DISubprogram SPDecl(cast<MDNode>(I->second));
     DISubprogram SP = CreateSubprogramDefinition(SPDecl, lineno, Fn);
+#endif
     SPDecl->replaceAllUsesWith(SP);
 
     // Push function on region stack.
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+    RegionStack.push_back(WeakVH(dyn_cast_or_null<Value>(SP)));
+    RegionMap[FnDecl] = WeakVH(dyn_cast_or_null<Value>(SP));
+#else
     RegionStack.push_back(WeakVH(SP));
     RegionMap[FnDecl] = WeakVH(SP);
+#endif
     return;
   }
 
@@ -296,67 +315,140 @@ void DebugInfo::EmitFunctionStart(tree FnDecl, Function *Fn) {
 
   unsigned Virtuality = 0;
   unsigned VIndex = 0;
-  DIType ContainingType;
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+  DIType *
+#else
+  DIType
+#endif
+      ContainingType;
   if (DECL_VINDEX(FnDecl) && DECL_CONTEXT(FnDecl) &&
       isa<TYPE>((DECL_CONTEXT(FnDecl)))) { // Workaround GCC PR42653
+#if (GCC_MAJOR > 4)
+    if (tree_fits_uhwi_p(DECL_VINDEX(FnDecl)))
+      VIndex = tree_to_shwi(DECL_VINDEX(FnDecl));
+#else
     if (host_integerp(DECL_VINDEX(FnDecl), 0))
       VIndex = tree_low_cst(DECL_VINDEX(FnDecl), 0);
+#endif
     Virtuality = dwarf::DW_VIRTUALITY_virtual;
     ContainingType = getOrCreateType(DECL_CONTEXT(FnDecl));
   }
 
   StringRef FnName = getFunctionName(FnDecl);
 
-  DISubprogram SP = CreateSubprogram(
-      SPContext, FnName, FnName, LinkageName, getOrCreateFile(Loc.file), lineno,
-      FNType, Fn->hasInternalLinkage(), true /*definition*/, ContainingType,
-      Virtuality, VIndex, DECL_ARTIFICIAL(FnDecl), optimize, Fn);
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+  DISubprogram *
+#else
+  DISubprogram
+#endif
+      SP = CreateSubprogram(
+          SPContext, FnName, FnName, LinkageName, getOrCreateFile(Loc.file),
+          lineno, FNType, Fn->hasInternalLinkage(), true /*definition*/,
+          ContainingType, Virtuality, VIndex, DECL_ARTIFICIAL(FnDecl),
+          optimize, Fn);
 
-  SPCache[FnDecl] = WeakVH(SP);
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+  SPCache[FnDecl] = WeakVH(dyn_cast_or_null<Value>(SP));
 
   // Push function on region stack.
+  RegionStack.push_back(WeakVH(dyn_cast_or_null<Value>(SP)));
+  RegionMap[FnDecl] = WeakVH(dyn_cast_or_null<Value>(SP));
+#else
+  SPCache[FnDecl] = WeakVH(SP);
   RegionStack.push_back(WeakVH(SP));
   RegionMap[FnDecl] = WeakVH(SP);
+#endif
 }
 
 /// getOrCreateNameSpace - Get name space descriptor for the tree node.
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+DINamespace *DebugInfo::getOrCreateNameSpace(tree Node, DIScope *Context) {
+#else
 DINameSpace DebugInfo::getOrCreateNameSpace(tree Node, DIDescriptor Context) {
+#endif
   std::map<tree_node *, WeakVH>::iterator I = NameSpaceCache.find(Node);
+#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
   if (I != NameSpaceCache.end())
     return DINameSpace(cast<MDNode>(I->second));
+#endif
 
   expanded_location Loc = GetNodeLocation(Node, false);
-  DINameSpace DNS = Builder.createNameSpace(
-      Context, GetNodeName(Node), getOrCreateFile(Loc.file), Loc.line);
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+  DINamespace *
+#else
+  DINameSpace
+#endif
+      DNS = Builder.createNameSpace(
+           Context, GetNodeName(Node), getOrCreateFile(Loc.file), Loc.line);
 
-  NameSpaceCache[Node] = WeakVH(DNS);
+  NameSpaceCache[Node] = WeakVH(
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+          dyn_cast_or_null<Value>
+#endif
+          (DNS));
   return DNS;
 }
 
 /// findRegion - Find tree_node N's region.
-DIDescriptor DebugInfo::findRegion(tree Node) {
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+DIScope *
+#else
+DIDescriptor
+#endif
+DebugInfo::findRegion(tree Node) {
   if (Node == NULL_TREE)
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+    return dyn_cast_or_null<DIScope>(getOrCreateFile(main_input_filename));
+#else
     return getOrCreateFile(main_input_filename);
+#endif
 
   std::map<tree_node *, WeakVH>::iterator I = RegionMap.find(Node);
   if (I != RegionMap.end())
     if (MDNode *R = dyn_cast_or_null<MDNode>(&*I->second))
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      return dyn_cast_or_null<DIScope>(R);
+#else
       return DIDescriptor(R);
+#endif
 
   if (isa<TYPE>(Node)) {
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+    DIType *Ty = getOrCreateType(Node);
+    return dyn_cast_or_null<DIScope>(Ty);
+#else
     DIType Ty = getOrCreateType(Node);
     return DIDescriptor(Ty);
+#endif
   } else if (DECL_P(Node)) {
     if (isa<NAMESPACE_DECL>(Node)) {
-      DIDescriptor NSContext = findRegion(DECL_CONTEXT(Node));
-      DINameSpace NS = getOrCreateNameSpace(Node, NSContext);
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      DIScope *
+#else
+      DIDescriptor
+#endif
+          NSContext = findRegion(DECL_CONTEXT(Node));
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      DINamespace *
+#else
+      DINamespace
+#endif
+          NS = getOrCreateNameSpace(Node, NSContext);
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      return dyn_cast_or_null<DIScope>(NS);
+#else
       return DIDescriptor(NS);
+#endif
     }
     return findRegion(DECL_CONTEXT(Node));
   }
 
   // Otherwise main compile unit covers everything.
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+  return dyn_cast_or_null<DIScope>(getOrCreateFile(main_input_filename));
+#else
   return getOrCreateFile(main_input_filename);
+#endif
 }
 
 /// EmitFunctionEnd - Pop the region stack and reset current lexical block.
@@ -385,17 +477,33 @@ void DebugInfo::EmitDeclare(tree decl, unsigned Tag, StringRef Name, tree type,
   expanded_location Loc = GetNodeLocation(decl, false);
 
   // Construct variable.
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+  DIScope *VarScope = dyn_cast_or_null<DIScope>(cast<MDNode>(RegionStack.back()));
+  DIType *Ty = getOrCreateType(type);
+#else
   DIScope VarScope = DIScope(cast<MDNode>(RegionStack.back()));
   DIType Ty = getOrCreateType(type);
+#endif
   if (Ty && DECL_ARTIFICIAL(decl))
     Ty = Builder.createArtificialType(Ty);
   // If type info is not available then do not emit debug info for this var.
   if (!Ty)
     return;
+
+  // https://reviews.llvm.org/rL243764
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+  llvm::DILocalVariable *D = Builder.createAutoVariable(
+      VarScope, Name, getOrCreateFile(Loc.file), Loc.line, Ty, optimize);
+  DbgDeclareInst *DbgDecl = FindAllocaDbgDeclare(AI);
+#else
   llvm::DIVariable D = Builder.createLocalVariable(
       Tag, VarScope, Name, getOrCreateFile(Loc.file), Loc.line, Ty, optimize);
+#endif
 
   Instruction *Call = Builder.insertDeclare(AI, D, Builder.createExpression(),
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+                                            DbgDecl->getDebugLoc(),
+#endif
                                             IRBuilder.GetInsertBlock());
 
   Call->setDebugLoc(DebugLoc::get(Loc.line, 0, VarScope));
@@ -428,7 +536,12 @@ void DebugInfo::EmitGlobalVariable(GlobalVariable *GV, tree decl) {
     return;
   // Gather location information.
   expanded_location Loc = expand_location(DECL_SOURCE_LOCATION(decl));
-  DIType TyD = getOrCreateType(TREE_TYPE(decl));
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+  DIType *
+#else
+  DIType
+#endif
+      TyD = getOrCreateType(TREE_TYPE(decl));
   StringRef DispName = GV->getName();
   if (DispName.empty())
     DispName = "__unknown__";
@@ -913,7 +1026,7 @@ DIType DebugInfo::createVariantType(tree type, DIType MainTy) {
 /// getOrCreateType - Get the type from the cache or create a new type if
 /// necessary.
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-DITypeRef
+DIType *
 #else
 DIType
 #endif
@@ -925,7 +1038,7 @@ DebugInfo::getOrCreateType(tree type) {
   // allows the caller to produce a non-derived type.
   if (isa<VOID_TYPE>(type))
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-    return DITypeRef();
+    return nullptr;
 #else
     return DIType();
 #endif
@@ -1154,24 +1267,35 @@ DICompositeType DebugInfo::CreateCompositeType(
 /// CreateSubprogram - Create a new descriptor for the specified subprogram.
 /// See comments in DISubprogram for descriptions of these fields.  This
 /// method does not unique the generated descriptors.
-DISubprogram DebugInfo::CreateSubprogram(
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+DISubprogram *
+#else
+DISubprogram
+#endif
+DebugInfo::CreateSubprogram(
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
     DIScope *Context,
 #else
     DIDescriptor Context,
 #endif
-    StringRef Name, StringRef DisplayName,
-    StringRef LinkageName, DIFile F, unsigned LineNo,
+    StringRef Name, StringRef DisplayName, StringRef LinkageName,
+    DIFile F, unsigned LineNo,
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-    DITypeRef Ty,
+    DIType *Ty,
 #else
     DIType Ty,
 #endif
-    bool isLocalToUnit, bool isDefinition, DIType ContainingType, unsigned VK,
-    unsigned VIndex, unsigned Flags, bool isOptimized, Function *Fn) {
+    bool isLocalToUnit, bool isDefinition,
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+    DIType *ContainingType,
+#else
+    DIType ContainingType,
+#endif
+    unsigned VK, unsigned VIndex, unsigned Flags, bool isOptimized,
+    Function *Fn) {
   DICompositeType CTy =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-      dyn_cast<DICompositeType>(Ty);
+      cast<DICompositeType>(Ty);
 #else
       getDICompositeType(Ty);
 #endif
@@ -1191,7 +1315,9 @@ DISubprogram DebugInfo::CreateSubprogram(
 DISubprogram DebugInfo::CreateSubprogramDefinition(
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
     DISubprogram *SP, unsigned LineNo, Function *Fn) {
-  
+  if (SP->isDefinition())
+    return SP;
+
   return Builder.createFile(SP->getScope(), SP->getName(), SP->getLinkageName(),
       SP->getFile(), SP->getLineNumber(), SP->getType(), SP->isLocalToUnit(),
       true, LineNo, SP->getFlags(), SP->isOptimized(), Fn,
