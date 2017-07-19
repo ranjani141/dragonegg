@@ -163,11 +163,10 @@ std::string getDescriptiveName(const_tree t) {
 /// the truncated value must sign-/zero-extend to the original.
 APInt getAPIntValue(const_tree exp, unsigned Bitwidth) {
   assert(isa<INTEGER_CST>(exp) && "Expected an integer constant!");
-  double_int val =
 #if (GCC_MAJOR > 4)
-      wi::to_offset(exp);
+  offset_int val = wi::to_offset(TREE_OPERAND(exp, 0));
 #else
-      tree_to_double_int(exp);
+  double_int val = tree_to_double_int(exp);
 #endif
   unsigned DefaultWidth = TYPE_PRECISION(TREE_TYPE(exp));
 
@@ -179,8 +178,13 @@ APInt getAPIntValue(const_tree exp, unsigned Bitwidth) {
            "Unsupported host integer width!");
     unsigned ShiftAmt = HOST_BITS_PER_WIDE_INT;
     integerPart Part =
+#if (GCC_MAJOR > 4)
+        integerPart((unsigned HOST_WIDE_INT) val.ulow()) +
+        (integerPart((unsigned HOST_WIDE_INT) val.uhigh()) << ShiftAmt);
+#else
         integerPart((unsigned HOST_WIDE_INT) val.low) +
         (integerPart((unsigned HOST_WIDE_INT) val.high) << ShiftAmt);
+#endif
     DefaultValue = APInt(DefaultWidth, Part);
   }
 
