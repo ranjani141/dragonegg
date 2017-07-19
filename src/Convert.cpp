@@ -124,9 +124,9 @@ extern void debug_gimple_stmt(gimple *stmt);
 #include "dragonegg/Trees.h"
 
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-static LLVMContext Context;
+static LLVMContext TheContext;
 #else
-static LLVMContext &Context = getGlobalContext();
+static LLVMContext &TheContext = getGlobalContext();
 #endif
 
 #define DEBUG_TYPE "dragonegg"
@@ -200,6 +200,12 @@ MemRef
 DisplaceLocationByUnits(MemRef Loc, int32_t Offset, LLVMBuilder &Builder) {
   // Convert to a byte pointer and displace by the offset.
   unsigned AddrSpace = Loc.Ptr->getType()->getPointerAddressSpace();
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      Loc.Ptr->getType()->getContext();
+#else
+      TheContext;
+#endif
   Type *UnitPtrTy = GetUnitPointerType(Context, AddrSpace);
   Value *Ptr = Builder.CreateBitCast(Loc.Ptr, UnitPtrTy);
   Ptr = Builder.CreateConstInBoundsGEP1_32(
@@ -366,6 +372,12 @@ static MDNode *describeTypeRange(tree type) {
   // Unlike GCC's, LLVM ranges do not include the upper end point.
   ++Hi;
 
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      ConvertType(TREE_TYPE(type))->getContext();
+#else
+      TheContext;
+#endif
   MDBuilder MDHelper(Context);
   return MDHelper.createRange(Lo, Hi);
 }
@@ -444,6 +456,13 @@ static Value *LoadRegisterFromMemory(MemRef Loc, tree type, MDNode *AliasTag,
       LI->setMetadata(LLVMContext::MD_range, Range);
     return LI;
   }
+
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      ConvertType(TREE_TYPE(type))->getContext();
+#else
+      TheContext;
+#endif
 
   // There is a discrepancy between the in-register type and the in-memory type.
   switch (TREE_CODE(type)) {
@@ -529,6 +548,13 @@ static void StoreRegisterToMemory(Value *V, MemRef Loc, tree type,
     StoreToLocation(V, Loc, AliasTag, Builder);
     return;
   }
+
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      ConvertType(TREE_TYPE(type))->getContext();
+#else
+      TheContext;
+#endif
 
   // There is a discrepancy between the in-register type and the in-memory type.
   switch (TREE_CODE(type)) {
@@ -621,7 +647,13 @@ bool TreeToLLVM::EmitDebugInfo() {
 }
 
 TreeToLLVM::TreeToLLVM(tree fndecl)
-    : DL(getDataLayout()), Builder(Context, *TheFolder) {
+    : DL(getDataLayout()), Builder(
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+            ConvertType(TREE_TYPE(fndecl))->getContext(),
+#else
+            TheContext,
+#endif
+            *TheFolder) {
   FnDecl = fndecl;
   AllocaInsertionPoint = 0;
   Fn = 0;
@@ -727,6 +759,12 @@ static void llvm_store_scalar_argument(Value *Loc, Value *ArgVal,
     assert(!BYTES_BIG_ENDIAN && "Unsupported case - please report");
     // Do byte wise store because actual argument type does not match LLVMTy.
     assert(ArgVal->getType()->isIntegerTy() && "Expected an integer value!");
+    LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+        LLVMTy->getContext();
+#else
+        TheContext;
+#endif
     Type *StoreType = IntegerType::get(Context, RealSize * 8);
     Loc = Builder.CreateBitCast(Loc, StoreType->getPointerTo());
     if (ArgVal->getType()->getPrimitiveSizeInBits() >=
@@ -871,6 +909,12 @@ struct FunctionPrologArgumentConversion : public DefaultABIClient {
       // bytes, but only 10 are copied.  If the object is really a union
       // we might need the other bytes.  We must also be careful to use
       // the smaller alignment.
+      LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+          ConvertType(TREE_TYPE(type))->getContext();
+#else
+          TheContext;
+#endif
       Type *SBP = Type::getInt8PtrTy(Context);
       Type *IntPtr = getDataLayout().getIntPtrType(Context, 0);
       Value *Ops[5] = {
@@ -955,6 +999,12 @@ void TreeToLLVM::StartFunctionBody() {
   FunctionType *FTy;
   CallingConv::ID CallingConv;
   AttributeSet PAL;
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      FTy->getContext();
+#else
+      TheContext;
+#endif
 
   // If this is a K&R-style function: with a type that takes no arguments but
   // with arguments none the less, then calculate the LLVM type from the list
@@ -1435,6 +1485,12 @@ Function *TreeToLLVM::FinishFunctionBody() {
         } else {
           // Advance to the point we want to load from.
           if (ReturnOffset) {
+            LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+                Fn->getReturnType()->getContext();
+#else
+                TheContext;
+#endif
             ResultLV.Ptr = Builder
                 .CreateBitCast(ResultLV.Ptr, Type::getInt8PtrTy(Context));
             ResultLV.Ptr = Builder.CreateGEP(
@@ -1568,7 +1624,7 @@ BasicBlock *TreeToLLVM::getBasicBlock(basic_block bb) {
     return I->second;
 
   // Otherwise, create a new LLVM basic block.
-  BasicBlock *BB = BasicBlock::Create(Context);
+  BasicBlock *BB = BasicBlock::Create(TheContext);
 
   // All basic blocks that directly correspond to GCC basic blocks (those
   // created here) must have a name.  All artificial basic blocks produced
@@ -1909,6 +1965,12 @@ Value *TreeToLLVM::CastToAnyType(Value *Src, bool SrcIsSigned, Type *DestTy,
   if (!CastInst::isCastable(SrcTy, DestTy)) {
     unsigned SrcBits = SrcTy->getScalarSizeInBits();
     unsigned DestBits = DestTy->getScalarSizeInBits();
+    LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+        SrcTy->getContext();
+#else
+        TheContext;
+#endif
     if (SrcBits && !isa<IntegerType>(SrcTy)) {
       Type *IntTy = IntegerType::get(Context, SrcBits);
       Src = Builder.CreateBitCast(Src, IntTy);
@@ -1944,6 +2006,12 @@ Constant *TreeToLLVM::CastToAnyType(Constant *Src, bool SrcIsSigned,
   if (!CastInst::isCastable(SrcTy, DestTy)) {
     unsigned SrcBits = SrcTy->getScalarSizeInBits();
     unsigned DestBits = DestTy->getScalarSizeInBits();
+    LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+        SrcTy->getContext();
+#else
+        TheContext;
+#endif
     if (SrcBits && !isa<IntegerType>(SrcTy)) {
       Type *IntTy = IntegerType::get(Context, SrcBits);
       Src = TheFolder->CreateBitCast(Src, IntTy);
@@ -2003,6 +2071,12 @@ Value *TreeToLLVM::CastToSameSizeInteger(Value *V) {
   // Everything else.
   assert(OrigEltTy->isFloatingPointTy() && "Expected a floating point type!");
   unsigned BitWidth = OrigEltTy->getPrimitiveSizeInBits();
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      OrigTy->getContext();
+#else
+      TheContext;
+#endif
   Type *NewEltTy = IntegerType::get(Context, BitWidth);
   if (VectorType *VecTy = llvm::dyn_cast<VectorType>(OrigTy)) {
     Type *NewTy = VectorType::get(NewEltTy, VecTy->getNumElements());
@@ -2067,6 +2141,12 @@ AllocaInst *TreeToLLVM::CreateTemporary(Type *Ty, unsigned align) {
     // alloc instructions before.  It doesn't matter what this instruction is,
     // it is dead.  This allows us to insert allocas in order without having to
     // scan for an insertion point. Use BitCast for int -> int
+    LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+        Ty->getContext();
+#else
+        TheContext;
+#endif
     AllocaInsertionPoint = CastInst::Create(
         Instruction::BitCast, Constant::getNullValue(Type::getInt32Ty(Context)),
         Type::getInt32Ty(Context), "alloca point");
@@ -2381,7 +2461,12 @@ void TreeToLLVM::EmitAggregateZero(MemRef DestLoc, tree type) {
 
 Value *TreeToLLVM::EmitMemCpy(Value *DestPtr, Value *SrcPtr, Value *Size,
                               unsigned Align) {
-
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      DestPtr->getType()->getContext();
+#else
+      TheContext;
+#endif
   Type *SBP = Type::getInt8PtrTy(Context);
   Type *IntPtr = DL.getIntPtrType(DestPtr->getType());
   Value *Ops[5] = { Builder.CreateBitCast(DestPtr, SBP),
@@ -2397,6 +2482,12 @@ Value *TreeToLLVM::EmitMemCpy(Value *DestPtr, Value *SrcPtr, Value *Size,
 
 Value *TreeToLLVM::EmitMemMove(Value *DestPtr, Value *SrcPtr, Value *Size,
                                unsigned Align) {
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      DestPtr->getType()->getContext();
+#else
+      TheContext;
+#endif
   Type *SBP = Type::getInt8PtrTy(Context);
   Type *IntPtr = DL.getIntPtrType(DestPtr->getType());
   Value *Ops[5] = { Builder.CreateBitCast(DestPtr, SBP),
@@ -2412,6 +2503,12 @@ Value *TreeToLLVM::EmitMemMove(Value *DestPtr, Value *SrcPtr, Value *Size,
 
 Value *TreeToLLVM::EmitMemSet(Value *DestPtr, Value *SrcVal, Value *Size,
                               unsigned Align) {
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      DestPtr->getType()->getContext();
+#else
+      TheContext;
+#endif
   Type *SBP = Type::getInt8PtrTy(Context);
   Type *IntPtr = DL.getIntPtrType(DestPtr->getType());
   Value *Ops[5] = { Builder.CreateBitCast(DestPtr, SBP),
@@ -2435,6 +2532,12 @@ void TreeToLLVM::EmitTypeGcroot(Value *V) {
 
   // The idea is that it's a pointer to type "Value"
   // which is opaque* but the routine expects i8** and i8*.
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      V->getType()->getContext();
+#else
+      TheContext;
+#endif
   PointerType *Ty = Type::getInt8PtrTy(Context);
   V = Builder.CreateBitCast(V, Ty->getPointerTo());
 
@@ -2455,6 +2558,12 @@ void TreeToLLVM::EmitAnnotateIntrinsic(Value *V, tree decl) {
   Function *annotateFun =
       Intrinsic::getDeclaration(TheModule, Intrinsic::var_annotation);
 
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      V->getType()->getContext();
+#else
+      TheContext;
+#endif
   // Get file and line number
   Constant *lineNo =
       ConstantInt::get(Type::getInt32Ty(Context), DECL_SOURCE_LINE(decl));
@@ -2520,6 +2629,12 @@ void TreeToLLVM::EmitAutomaticVariableDecl(tree decl) {
   } else {
     // Compute the variable's size in bytes.
     Size = EmitRegister(DECL_SIZE_UNIT(decl));
+    LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+        Size->getType()->getContext();
+#else
+        TheContext;
+#endif
     Ty = Type::getInt8Ty(Context);
   }
 
@@ -2601,6 +2716,12 @@ AllocaInst *TreeToLLVM::getExceptionPtr(int RegionNo) {
   AllocaInst *&ExceptionPtr = ExceptionPtrs[RegionNo];
 
   if (!ExceptionPtr) {
+    LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+        ExceptionPtr->getAllocatedType()->getContext();
+#else
+        TheContext;
+#endif
     ExceptionPtr = CreateTemporary(Type::getInt8PtrTy(Context));
     ExceptionPtr->setName("exc_tmp");
   }
@@ -2619,6 +2740,12 @@ AllocaInst *TreeToLLVM::getExceptionFilter(int RegionNo) {
   AllocaInst *&ExceptionFilter = ExceptionFilters[RegionNo];
 
   if (!ExceptionFilter) {
+    LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+        ExceptionFilter->getAllocatedType()->getContext();
+#else
+        TheContext;
+#endif
     ExceptionFilter = CreateTemporary(Type::getInt32Ty(Context));
     ExceptionFilter->setName("filt_tmp");
   }
@@ -2637,7 +2764,7 @@ BasicBlock *TreeToLLVM::getFailureBlock(int RegionNo) {
   BasicBlock *&FailureBlock = FailureBlocks[RegionNo];
 
   if (!FailureBlock)
-    FailureBlock = BasicBlock::Create(Context, "fail");
+    FailureBlock = BasicBlock::Create(TheContext, "fail");
 
   return FailureBlock;
 }
@@ -2672,6 +2799,12 @@ void TreeToLLVM::EmitLandingPads() {
       continue;
 
     // Create the LLVM landing pad right before the GCC post landing pad.
+    LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+        PostPad->getContext();
+#else
+        TheContext;
+#endif
     BasicBlock *LPad = BasicBlock::Create(Context, "lpad", Fn, PostPad);
 
     // Redirect invoke unwind edges from the GCC post landing pad to LPad.
@@ -2847,6 +2980,12 @@ void TreeToLLVM::EmitFailureBlocks() {
     if (!FailureBlock)
       continue;
 
+    LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+        FailureBlock->getContext();
+#else
+        TheContext;
+#endif
     eh_region region = get_eh_region_from_number(RegionNo);
     assert(region->type == ERT_MUST_NOT_THROW && "Unexpected region type!");
 
@@ -2986,6 +3125,12 @@ Value *TreeToLLVM::EmitLoadOfLValue(tree exp) {
   LoadSizeInBits = alignTo(LoadSizeInBits, BITS_PER_UNIT);
 #else
   LoadSizeInBits = RoundUpToAlignment(LoadSizeInBits, BITS_PER_UNIT);
+#endif
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      Ty->getContext();
+#else
+      TheContext;
 #endif
   Type *LoadType = IntegerType::get(Context, LoadSizeInBits);
 
@@ -3152,6 +3297,12 @@ static Value *llvm_load_scalar_argument(
   // Not clear what this is supposed to do on big endian machines...
   assert(!BYTES_BIG_ENDIAN && "Unsupported case - please report");
   assert(LLVMTy->isIntegerTy() && "Expected an integer value!");
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      LLVMTy->getContext();
+#else
+      TheContext;
+#endif
   Type *LoadType = IntegerType::get(Context, RealSize * 8);
   L = Builder.CreateBitCast(L, LoadType->getPointerTo());
   Value *Val = Builder.CreateLoad(L);
@@ -3471,6 +3622,12 @@ Value *TreeToLLVM::EmitCallOf(Value *Callee, GimpleTy *stmt,
   SmallVector<Value *, 16> CallOperands;
   PointerType *PFTy = cast<PointerType>(Callee->getType());
   FunctionType *FTy = cast<FunctionType>(PFTy->getElementType());
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      FTy->getContext();
+#else
+      TheContext;
+#endif
   FunctionCallArgumentConversion Client(CallOperands, FTy, DestLoc,
                                         gimple_call_return_slot_opt_p(
 #if (GCC_MAJOR > 4)
@@ -3757,6 +3914,12 @@ CallInst *TreeToLLVM::EmitSimpleCall(StringRef CalleeName, tree ret_type,
 #endif
   va_end(ops);
 
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      ConvertType(TREE_TYPE(ret_type))->getContext();
+#else
+      TheContext;
+#endif
   Type *RetTy = isa<VOID_TYPE>(ret_type) ? Type::getVoidTy(Context)
                                          : getRegType(ret_type);
 
@@ -3846,6 +4009,12 @@ void TreeToLLVM::EmitModifyOfRegisterVariable(tree decl, Value *RHS) {
   // Turn this into a 'call void asm sideeffect "", "{reg}"(Ty %RHS)'.
   std::vector<Type *> ArgTys;
   ArgTys.push_back(RHS->getType());
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      RHS->getType()->getContext();
+#else
+      TheContext;
+#endif
   FunctionType *FTy =
       FunctionType::get(Type::getVoidTy(Context), ArgTys, false);
 
@@ -4369,6 +4538,12 @@ Value *TreeToLLVM::BuildVectorShuffle(Value *InVec1, Value *InVec2, ...) {
   assert(InVec1->getType()->isVectorTy() &&
          InVec1->getType() == InVec2->getType() && "Invalid shuffle!");
   unsigned NumElements = cast<VectorType>(InVec1->getType())->getNumElements();
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      InVec1->getType()->getContext();
+#else
+      TheContext;
+#endif
 
   // Get all the indexes from varargs.
   SmallVector<Constant *, 16> Idxs;
@@ -4486,6 +4661,12 @@ TreeToLLVM::BuildCmpAndSwapAtomic(GimpleTy *stmt, unsigned Bits, bool isBool) {
 #endif
 
   // The type loaded from/stored to memory.
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      ConvertType(TREE_TYPE(ptr))->getContext();
+#else
+      TheContext;
+#endif
   Type *MemTy = IntegerType::get(Context, Bits);
   Type *MemPtrTy = MemTy->getPointerTo();
 
@@ -4566,6 +4747,12 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
     return true;
   }
 
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      ConvertType(TREE_TYPE(fndecl))->getContext();
+#else
+      TheContext;
+#endif
   enum built_in_function fcode = DECL_FUNCTION_CODE(fndecl);
   switch (fcode) {
   default:
@@ -5625,6 +5812,12 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
 #endif
                   (stmt), 1));
       Type *Ty = Val->getType();
+      LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+          Ty->getContext();
+#else
+          TheContext;
+#endif
       Pow = Builder.CreateIntCast(Pow, Type::getInt32Ty(Context),
                                   /*isSigned*/ true);
 
@@ -5790,6 +5983,12 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
         // Get the LLVM function declaration for sincos.
         Type *ArgTys[3] = { Val->getType(), SinPtr->getType(),
                             CosPtr->getType() };
+        LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+            Val->getType()->getContext();
+#else
+            TheContext;
+#endif
         FunctionType *FTy = FunctionType::get(Type::getVoidTy(Context), ArgTys,
                                               /*isVarArg*/ false);
         Constant *Func = TheModule->getOrInsertFunction(Name, FTy);
@@ -5941,6 +6140,12 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
                   (stmt), 0));
       Type *ArgTy = Arg->getType();
       unsigned ArgWidth = ArgTy->getPrimitiveSizeInBits();
+      LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+          ArgTy->getContext();
+#else
+          TheContext;
+#endif
       Type *ArgIntTy = IntegerType::get(Context, ArgWidth);
       Value *BCArg = Builder.CreateBitCast(Arg, ArgIntTy);
       Value *ZeroCmp = Constant::getNullValue(ArgIntTy);
@@ -6146,6 +6351,12 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
       unsigned DstAlign = getPointerAlignment(Dst);
 
       Value *DstV = EmitMemory(Dst);
+      LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+          DstV->getType()->getContext();
+#else
+          TheContext;
+#endif
       Value *Val = Constant::getNullValue(Type::getInt32Ty(Context));
       Value *Len = EmitMemory(gimple_call_arg(
 #if (GCC_MAJOR > 4)
@@ -6169,6 +6380,12 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
                   as_a<gcall *>
 #endif
                   (stmt), 0));
+      LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+          Ptr->getType()->getContext();
+#else
+          TheContext;
+#endif
       Value *ReadWrite = 0;
       Value *Locality = 0;
       Value *Data = 0;
@@ -6296,7 +6513,12 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
       // offset are defined. This seems to be needed for: ARM, MIPS, Sparc.
       // Unfortunately, these constants are defined as RTL expressions and
       // should be handled separately.
-
+      LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+          Ptr->getType()->getContext();
+#else
+          TheContext;
+#endif
       Result = Builder.CreateBitCast(Ptr, Type::getInt8PtrTy(Context));
 
       return true;
@@ -6315,7 +6537,12 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
       // Result = Ptr - RETURN_ADDR_OFFSET, if offset is defined. This seems to be
       // needed for: MIPS, Sparc.  Unfortunately, these constants are defined
       // as RTL expressions and should be handled separately.
-
+      LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+          Ptr->getType()->getContext();
+#else
+          TheContext;
+#endif
       Result = Builder.CreateBitCast(Ptr, Type::getInt8PtrTy(Context));
 
       return true;
@@ -6523,12 +6750,18 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
                   (stmt), INTEGER_TYPE, POINTER_TYPE, VOID_TYPE))
         return false;
 
-      Type *IntPtr = DL.getIntPtrType(Context, 0);
       Value *Offset = EmitMemory(gimple_call_arg(
 #if (GCC_MAJOR > 4)
                   as_a<gcall *>
 #endif
                   (stmt), 0));
+      LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+          Offset->getType()->getContext();
+#else
+          TheContext;
+#endif
+      Type *IntPtr = DL.getIntPtrType(Context, 0);
       Value *Handler = EmitMemory(gimple_call_arg(
 #if (GCC_MAJOR > 4)
                   as_a<gcall *>
@@ -6568,6 +6801,17 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
         reg_modes_initialized = true;
       }
 
+      Value *Ptr = EmitMemory(gimple_call_arg(
+#if (GCC_MAJOR > 4)
+                  as_a<gcall *>
+#endif
+                  (stmt), 0));
+      LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+          Ptr->getType()->getContext();
+#else
+          TheContext;
+#endif
       Value *Addr = Builder.CreateBitCast(EmitMemory(gimple_call_arg(
 #if (GCC_MAJOR > 4)
                       as_a<gcall *>
@@ -6654,6 +6898,12 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
                   as_a<gcall *>
 #endif
                   (stmt), 0));
+      LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+          Ptr->getType()->getContext();
+#else
+          TheContext;
+#endif
       Ptr = Builder.CreateBitCast(Ptr, Type::getInt8PtrTy(Context));
 
       Builder.CreateCall(
@@ -6673,6 +6923,12 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
                   as_a<gcall *>
 #endif
                   (stmt), 0));
+      LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+          Amt->getType()->getContext();
+#else
+          TheContext;
+#endif
       AllocaInst *Alloca = Builder.CreateAlloca(Type::getInt8Ty(Context), Amt);
       Alloca->setAlignment(BIGGEST_ALIGNMENT / 8);
       Result = Alloca;
@@ -6697,6 +6953,12 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
                   as_a<gcall *>
 #endif
                   (stmt), 1), true);
+      LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+          Amt->getType()->getContext();
+#else
+          TheContext;
+#endif
       AllocaInst *Alloca = Builder.CreateAlloca(Type::getInt8Ty(Context), Amt);
       Alloca->setAlignment(Align / 8);
       Result = Alloca;
@@ -6796,6 +7058,12 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
                   as_a<gcall *>
 #endif
                   (stmt), 0));
+      LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+          ArgVal->getType()->getContext();
+#else
+          TheContext;
+#endif
       ArgVal = Builder.CreateBitCast(ArgVal, Type::getInt8PtrTy(Context));
       Builder.CreateCall(va_start, ArgVal);
       return true;
@@ -6807,6 +7075,12 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
                   as_a<gcall *>
 #endif
                   (stmt), 0));
+      LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+          Arg->getType()->getContext();
+#else
+          TheContext;
+#endif
       Arg = Builder.CreateBitCast(Arg, Type::getInt8PtrTy(Context));
       Builder.CreateCall(Intrinsic::getDeclaration(TheModule, Intrinsic::vaend),
                          Arg);
@@ -6840,6 +7114,12 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
         Arg2 = EmitMemory(Arg2T);
       }
 
+      LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+          Arg1->getType()->getContext();
+#else
+          TheContext;
+#endif
       static Type *VPTy = Type::getInt8PtrTy(Context);
 
       // FIXME: This ignores alignment and volatility of the arguments.
@@ -6952,6 +7232,12 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
       tree AnnotateAttr =
           lookup_attribute("annotate", DECL_ATTRIBUTES(FieldDecl));
 
+      LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+          FieldPtr->getType()->getContext();
+#else
+          TheContext;
+#endif
       Type *SBP = Type::getInt8PtrTy(Context);
 
       Function *An =
@@ -7061,7 +7347,12 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
       // Otherwise, just do raw, low-level pointer arithmetic.  FIXME: this could be
       // much nicer in cases like:
       //   float foo(int w, float A[][w], int g) { return A[g][0]; }
-
+      LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+          IntPtrTy->getContext();
+#else
+          TheContext;
+#endif
       if (isa<VOID_TYPE>(TREE_TYPE(ArrayTreeType))) {
         ArrayAddr =
             Builder.CreateBitCast(ArrayAddr, Type::getInt8PtrTy(Context));
@@ -7210,6 +7501,12 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
           BitStart -= ByteOffset * 8;
         }
 
+        LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+            StructTy->getContext();
+#else
+            TheContext;
+#endif
         Type *BytePtrTy = Type::getInt8PtrTy(Context);
         FieldPtr = Builder.CreateBitCast(StructAddrLV.Ptr, BytePtrTy);
         FieldPtr = Builder.CreateInBoundsGEP(FieldPtr, Offset,
@@ -7256,6 +7553,12 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
       }
 
       Type *Ty = ConvertType(TREE_TYPE(exp));
+      LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+          Decl->getType()->getContext();
+#else
+          TheContext;
+#endif
       // If we have "extern void foo", make the global have type {} instead of
       // type void.
       if (Ty->isVoidTy())
@@ -7285,6 +7588,12 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
       Value *Addr = EmitRegister(TREE_OPERAND(exp, 0));
       if (!integer_zerop(TREE_OPERAND(exp, 1))) {
         // Convert to a byte pointer and displace by the offset.
+        LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+            Addr->getType()->getContext();
+#else
+            TheContext;
+#endif
         Addr = Builder.CreateBitCast(Addr, GetUnitPointerType(Context));
         APInt Offset = getAPIntValue(TREE_OPERAND(exp, 1));
         // The address is always inside the referenced object, so "inbounds".
@@ -7405,6 +7714,12 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
       }
 #endif
 
+      LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+          Addr->getType()->getContext();
+#else
+          TheContext;
+#endif
       if (TMR_INDEX(exp)) {
         Value *Index = EmitRegister(TMR_INDEX(exp));
         if (TMR_STEP(exp) && !integer_onep(TMR_STEP(exp)))
@@ -7588,10 +7903,16 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
     /// EmitIntegerRegisterConstant - Turn the given INTEGER_CST into an LLVM
     /// constant of the corresponding register type.
     Constant *TreeToLLVM::EmitIntegerRegisterConstant(tree reg) {
-      ConstantInt *CI = ConstantInt::get(Context, getAPIntValue(reg));
       // The destination can be a pointer, integer or floating point type so we need
       // a generalized cast here
       Type *Ty = getRegType(TREE_TYPE(reg));
+      LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+          Ty->getContext();
+#else
+          TheContext;
+#endif
+      ConstantInt *CI = ConstantInt::get(Context, getAPIntValue(reg));
       Instruction::CastOps opcode = CastInst::getCastOpcode(
           CI, false, Ty, !TYPE_UNSIGNED(TREE_TYPE(reg)));
       return TheFolder->CreateCast(opcode, CI, Ty);
@@ -7643,6 +7964,12 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
       // Form an APInt from the buffer, an APFloat from the APInt, and the desired
       // floating point constant from the APFloat, phew!
       const APInt &I = APInt(Precision, Words, Parts);
+      LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+          Ty->getContext();
+#else
+          TheContext;
+#endif
       return ConstantFP::get(Context, APFloat(Ty->getFltSemantics(), I));
     }
 
@@ -7805,6 +8132,12 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
       // with their initial values, and before any modifications to their values.
 
       // Create a builder that inserts code before the SSAInsertionPoint marker.
+      LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+          ConvertType(TREE_TYPE(reg))->getContext();
+#else
+          TheContext;
+#endif
       LLVMBuilder SSABuilder(Context, Builder.getFolder());
       // https://reviews.llvm.org/rL249925
       SSABuilder.SetInsertPoint(
@@ -7825,6 +8158,12 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
 
     // Unary expressions.
     Value *TreeToLLVM::EmitReg_ABS_EXPR(tree op) {
+      LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+          ConvertType(TREE_TYPE(op))->getContext();
+#else
+          TheContext;
+#endif
       if (!isa<FLOAT_TYPE>(TREE_TYPE(op))) {
         Value *Op = EmitRegister(op);
         Value *OpN = Builder.CreateNeg(Op, Op->getName() + "neg");
@@ -8079,6 +8418,12 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
       assert(Length > 1 && !(Length & (Length - 1)) &&
              "Length not a power of 2!");
       SmallVector<Constant *, 8> Mask(Length);
+      LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+          Ty->getContext();
+#else
+          TheContext;
+#endif
       Constant *UndefIndex = UndefValue::get(Type::getInt32Ty(Context));
       for (unsigned Elts = Length >> 1; Elts; Elts >>= 1) {
         // In the extracted vectors, elements with index Elts and on are undefined.
@@ -8123,6 +8468,12 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
       assert(Length > 1 && !(Length & (Length - 1)) &&
              "Length not a power of 2!");
       SmallVector<Constant *, 8> Mask(Length);
+      LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+          Ty->getContext();
+#else
+          TheContext;
+#endif
       Constant *UndefIndex = UndefValue::get(Type::getInt32Ty(Context));
       for (unsigned Elts = Length >> 1; Elts; Elts >>= 1) {
         // In the extracted vectors, elements with index Elts and on are undefined.
@@ -8196,6 +8547,12 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
                               /*isSigned*/ false);
           RHS = Builder.CreateInsertElement(UndefValue::get(VecTy), RHS,
                                             Builder.getInt32(0));
+          LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+              VecTy->getContext();
+#else
+              TheContext;
+#endif
           Type *MaskTy = VectorType::get(Type::getInt32Ty(Context),
                                          VecTy->getNumElements());
           RHS = Builder.CreateShuffleVector(RHS, UndefValue::get(VecTy),
@@ -8211,6 +8568,12 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
       Value *Amt = EmitRegister(op1); // An integer.
       VectorType *VecTy = cast<VectorType>(LHS->getType());
       unsigned Bits = VecTy->getPrimitiveSizeInBits();
+      LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+          VecTy->getContext();
+#else
+          TheContext;
+#endif
 
       // If the shift is by a multiple of the element size then emit a shuffle.
       if (ConstantInt *CI = llvm::dyn_cast<ConstantInt>(Amt)) {
@@ -8571,6 +8934,12 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
     Value *TreeToLLVM::EmitReg_POINTER_PLUS_EXPR(tree op0, tree op1) {
       Value *Ptr = EmitRegister(op0); // The pointer.
       Value *Idx = EmitRegister(op1); // The offset in units.
+      LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+          Idx->getType()->getContext();
+#else
+          TheContext;
+#endif
 
       // Convert the pointer into an i8* and add the offset to it.
       Ptr = Builder.CreateBitCast(Ptr, GetUnitPointerType(Context));
@@ -9289,6 +9658,12 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
         if (AllowsReg || !AllowsMem) { // Register operand.
           Type *LLVMTy = ConvertType(type);
 
+          LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+              LLVMTy->getContext();
+#else
+              TheContext;
+#endif
           Value *Op = 0;
           Type *OpTy = LLVMTy;
           if (LLVMTy->isSingleValueType()) {
@@ -9547,7 +9922,7 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
       switch (CallResultTypes.size()) {
         // If there are no results then the return type is void!
       case 0:
-        CallResultType = Type::getVoidTy(Context);
+        CallResultType = Type::getVoidTy(TheContext);
         break;
         // If there is one result then use the result's type as the return type.
       case 1:
@@ -9559,7 +9934,7 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
         SmallVector<Type *, 4> Fields((unsigned) CallResultTypes.size());
         for (unsigned i = 0, e = (unsigned) CallResultTypes.size(); i != e; ++i)
           Fields[i] = CallResultTypes[i].first;
-        CallResultType = StructType::get(Context, Fields);
+        CallResultType = StructType::get(TheContext, Fields);
         break;
       }
 
@@ -9731,6 +10106,12 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
       case ERT_ALLOWED_EXCEPTIONS: {
         // Filter.
         BasicBlock *Dest = getLabelDeclBlock(region->u.allowed.label);
+        LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+            Dest->getContext();
+#else
+            TheContext;
+#endif
 
         if (!region->u.allowed.type_list) {
           // Not allowed to throw.  Branch directly to the post landing pad.
@@ -9763,6 +10144,12 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
         SmallSet<Value *, 8> AlreadyCaught; // Typeinfos known caught.
         Function *TypeIDIntr =
             Intrinsic::getDeclaration(TheModule, Intrinsic::eh_typeid_for);
+        LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+            TypeIDIntr->getContext();
+#else
+            TheContext;
+#endif
         for (eh_catch c = region->u.eh_try.first_catch; c; c = c->next_catch) {
           BasicBlock *Dest = getLabelDeclBlock(c->label);
           if (!c->type_list) {
@@ -9899,6 +10286,12 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
         }
       }
 
+      LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+          ConvertType(TREE_TYPE(retval))->getContext();
+#else
+          TheContext;
+#endif
       // Emit a branch to the exit label.
       if (!ReturnBB)
         // Create a new block for the return node, but don't insert it yet.
@@ -9963,6 +10356,12 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
         ConstantInt *HighC = cast<ConstantInt>(Val);
 
         APInt Range = HighC->getValue() - LowC->getValue();
+        LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+            Val->getType()->getContext();
+#else
+            TheContext;
+#endif
         if (Range.ult(APInt(Range.getBitWidth(), 64))) {
           // Add all of the necessary successors to the switch.
           APInt CurrentValue = LowC->getValue();
@@ -10352,6 +10751,12 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
       // fall into the subsequent block.
       if (gimple_call_flags(stmt) & ECF_NORETURN) {
         Builder.CreateUnreachable();
+        LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+            Result->getType()->getContext();
+#else
+            TheContext;
+#endif
         BeginBlock(BasicBlock::Create(Context));
       }
 
@@ -10407,6 +10812,12 @@ void TreeToLLVM::WriteScalarToLHS(tree lhs, Value * RHS) {
       (unsigned) alignTo(LoadSizeInBits, BITS_PER_UNIT);
 #else
       (unsigned) RoundUpToAlignment(LoadSizeInBits, BITS_PER_UNIT);
+#endif
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      RHS->getType()->getContext();
+#else
+      TheContext;
 #endif
   Type *LoadType = IntegerType::get(Context, LoadSizeInBits);
 

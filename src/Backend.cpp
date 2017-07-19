@@ -191,6 +191,8 @@ static PassManager *CodeGenPasses = 0;
 
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
 static LLVMContext TheContext;
+#else
+static LLVMContext &TheContext = getGlobalContext();
 #endif
 
 static void createPerFunctionOptimizationPasses();
@@ -647,13 +649,7 @@ static void output_ident(const char *ident_str) {
 static void CreateModule(const std::string &TargetTriple) {
   // Create the module itself.
   StringRef ModuleID = main_input_filename ? main_input_filename : "";
-  TheModule = new Module(ModuleID,
-#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-                         TheContext
-#else
-                         getGlobalContext()
-#endif
-                         );
+  TheModule = new Module(ModuleID, TheContext);
 
 #if GCC_VERSION_CODE < GCC_VERSION(4, 8)
 #ifdef IDENT_ASM_OP
@@ -968,11 +964,7 @@ static void CreateStructorsList(std::vector<std::pair<Constant *, int> > &Tors,
   std::vector<Constant *> StructInit;
   StructInit.resize(2);
 
-#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
   LLVMContext &Context = TheContext;
-#else
-  LLVMContext &Context = getGlobalContext();
-#endif
 
   Type *FPTy =
       FunctionType::get(Type::getVoidTy(Context), std::vector<Type *>(), false);
@@ -996,13 +988,7 @@ static void CreateStructorsList(std::vector<std::pair<Constant *, int> > &Tors,
 /// global if possible.
 Constant *ConvertMetadataStringToGV(const char *str) {
 
-  Constant *Init = ConstantDataArray::getString(
-#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-          TheContext,
-#else
-          getGlobalContext(),
-#endif
-          str);
+  Constant *Init = ConstantDataArray::getString(TheContext, str);
 
   // Use cached string if it exists.
   static std::map<Constant *, GlobalVariable *> StringCSTCache;
@@ -1023,11 +1009,7 @@ Constant *ConvertMetadataStringToGV(const char *str) {
 /// AddAnnotateAttrsToGlobal - Adds decls that have a annotate attribute to a
 /// vector to be emitted later.
 void AddAnnotateAttrsToGlobal(GlobalValue *GV, tree decl) {
-#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
   LLVMContext &Context = TheContext;
-#else
-  LLVMContext &Context = getGlobalContext();
-#endif
 
   // Handle annotate attribute on global.
   tree annotateAttr = lookup_attribute("annotate", DECL_ATTRIBUTES(decl));
@@ -1474,10 +1456,11 @@ Value *make_decl_llvm(tree decl) {
   if (errorcount || sorrycount)
     return NULL; // Do not process broken code.
 
+  LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-  LLVMContext &Context = TheContext;
+      ConvertType(TREE_TYPE(decl))->getContext();
 #else
-  LLVMContext &Context = getGlobalContext();
+      TheContext;
 #endif
 
   // Global register variable with asm name, e.g.:
@@ -2133,11 +2116,7 @@ static void llvm_finish_unit(void */*gcc_data*/, void */*user_data*/) {
     TheDebugInfo = 0;
   }
 
-#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
   LLVMContext &Context = TheContext;
-#else
-  LLVMContext &Context = getGlobalContext();
-#endif
 
   createPerFunctionOptimizationPasses();
 

@@ -73,13 +73,21 @@ extern void debug_gimple_stmt(union gimple_statement_d *);
 
 using namespace llvm;
 
-static LLVMContext &Context = getGlobalContext();
+#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
+static LLVMContext &TheContext = getGlobalContext();
+#endif
 
 /// BitCastToIntVector - Bitcast the vector operand to a vector of integers of
 //  the same length.
 static Value *BitCastToIntVector(Value *Op, LLVMBuilder &Builder) {
   VectorType *VecTy = cast<VectorType>(Op->getType());
   Type *EltTy = VecTy->getElementType();
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      EltTy->getContext();
+#else
+      TheContext;
+#endif
   Type *IntTy = IntegerType::get(Context, EltTy->getPrimitiveSizeInBits());
   return Builder.CreateBitCast(Op,
                                VectorType::get(IntTy, VecTy->getNumElements()));
@@ -167,6 +175,12 @@ bool TreeToLLVM::TargetIntrinsicLower(GimpleTy *stmt, tree fndecl,
   bool flip = false;
   unsigned PredCode;
 
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      ResultType->getContext();
+#else
+      TheContext;
+#endif
   switch (Handler) {
   case SearchForHandler:
     debug_gimple_stmt(stmt);
@@ -1744,6 +1758,12 @@ Type *llvm_x86_aggr_type_for_struct_return(tree type) {
 
   StructType *STy = cast<StructType>(Ty);
   std::vector<Type *> ElementTypes;
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      Ty->getContext();
+#else
+      TheContext;
+#endif
 
   // Special handling for _Complex.
   if (llvm_x86_should_not_return_complex_in_memory(type)) {
@@ -1771,6 +1791,12 @@ static void llvm_x86_extract_mrv_array_element(
   Value *EVI = Builder.CreateExtractValue(Src, SrcFieldNo, "mrv_gr");
   StructType *STy = cast<StructType>(Src->getType());
   Value *Idxs[3];
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      STy->getContext();
+#else
+      TheContext;
+#endif
   Idxs[0] = ConstantInt::get(Type::getInt32Ty(Context), 0);
   Idxs[1] = ConstantInt::get(Type::getInt32Ty(Context), DestFieldNo);
   Idxs[2] = ConstantInt::get(Type::getInt32Ty(Context), DestElemNo);
@@ -1798,6 +1824,13 @@ void llvm_x86_extract_multiple_return_value(
 
   unsigned SNO = 0;
   unsigned DNO = 0;
+
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      STy->getContext();
+#else
+      TheContext;
+#endif
 
   if (DestTy->getNumElements() == 3 &&
       DestTy->getElementType(0)->getTypeID() == Type::FloatTyID &&
