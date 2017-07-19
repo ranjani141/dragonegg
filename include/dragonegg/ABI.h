@@ -142,8 +142,12 @@ getLLVMScalarTypeForStructReturn(tree_node *type, unsigned *Offset) {
   llvm::Type *Ty = ConvertType(type);
   uint64_t Size = getDataLayout().getTypeAllocSize(Ty);
   *Offset = 0;
+  llvm::LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-  llvm::LLVMContext Context;
+      Ty->getContext();
+#else
+      getGlobalContext();
+#endif
   if (Size == 0)
     return llvm::Type::getVoidTy(Context);
   else if (Size == 1)
@@ -158,22 +162,6 @@ getLLVMScalarTypeForStructReturn(tree_node *type, unsigned *Offset) {
     return llvm::IntegerType::get(Context, 128);
   else if (Size <= 32)
     return llvm::IntegerType::get(Context, 256);
-#else
-  if (Size == 0)
-    return llvm::Type::getVoidTy(llvm::getGlobalContext());
-  else if (Size == 1)
-    return llvm::Type::getInt8Ty(llvm::getGlobalContext());
-  else if (Size == 2)
-    return llvm::Type::getInt16Ty(llvm::getGlobalContext());
-  else if (Size <= 4)
-    return llvm::Type::getInt32Ty(llvm::getGlobalContext());
-  else if (Size <= 8)
-    return llvm::Type::getInt64Ty(llvm::getGlobalContext());
-  else if (Size <= 16)
-    return llvm::IntegerType::get(llvm::getGlobalContext(), 128);
-  else if (Size <= 32)
-    return llvm::IntegerType::get(llvm::getGlobalContext(), 256);
-#endif
 
   return NULL;
 }
