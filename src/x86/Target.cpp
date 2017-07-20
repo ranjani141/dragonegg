@@ -78,7 +78,8 @@ extern void debug_gimple_stmt(union gimple_statement_d *);
 // One day we will do parameter marshalling right: by using CUMULATIVE_ARGS.
 // While waiting for that happy day, just include a chunk of i386.c.
 #if (GCC_MAJOR > 4)
-#include "ABIHack2.inc"
+#include "ABIHack6.inc"
+#define MAX_CLASSES 8
 #else
 #include "ABIHack.inc"
 #endif
@@ -1454,9 +1455,9 @@ bool llvm_x86_64_should_pass_aggregate_in_mixed_regs(
       llvm_unreachable("Unexpected register class!");
     }
   }
-#endif
 
   return !totallyEmpty;
+#endif
 }
 
 /* On Darwin x86-32, vectors which are not MMX nor SSE should be passed as
@@ -1570,6 +1571,7 @@ static bool llvm_suitable_multiple_ret_value_type(Type *Ty, tree TreeType) {
 
   // Let gcc specific routine answer the question.
   enum x86_64_reg_class Class[MAX_CLASSES];
+#if (GCC_MAJOR < 5)
   enum machine_mode Mode = type_natural_mode(TreeType, NULL);
   int NumClasses = classify_argument(Mode, TreeType, Class, 0);
   if (NumClasses == 0)
@@ -1585,6 +1587,7 @@ static bool llvm_suitable_multiple_ret_value_type(Type *Ty, tree TreeType) {
     // One word is padding which is not passed at all; treat this as returning
     // the scalar type of the other word.
     return false;
+#endif
 
   // Otherwise, use of multiple value return is OK.
   return true;
@@ -1596,6 +1599,12 @@ Type *llvm_x86_scalar_type_for_struct_return(tree type, unsigned *Offset) {
   *Offset = 0;
   Type *Ty = ConvertType(type);
   uint64_t Size = getDataLayout().getTypeAllocSize(Ty);
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      Ty->getContext();
+#else
+      TheContext;
+#endif
   if (Size == 0)
     return Type::getVoidTy(Context);
   else if (Size == 1)
@@ -1636,7 +1645,6 @@ Type *llvm_x86_scalar_type_for_struct_return(tree type, unsigned *Offset) {
       }
       llvm_unreachable("Unexpected type!");
     }
-#endif
     if (NumClasses == 2) {
       if (Class[1] == X86_64_NO_CLASS) {
         if (Class[0] == X86_64_INTEGER_CLASS || Class[0] == X86_64_NO_CLASS ||
@@ -1662,6 +1670,7 @@ Type *llvm_x86_scalar_type_for_struct_return(tree type, unsigned *Offset) {
       llvm_unreachable("Unexpected type!");
     }
     llvm_unreachable("Unexpected type!");
+#endif
   } else {
     if (Size <= 8)
       return Type::getInt64Ty(Context);
@@ -1897,15 +1906,27 @@ void llvm_x86_extract_multiple_return_value(
 
     Value *E0Index = ConstantInt::get(Type::getInt32Ty(Context), 0);
     Value *EVI0 = Builder.CreateExtractElement(EVI, E0Index, "mrv.v");
-    Value *GEP0 = Builder.CreateStructGEP(Dest, 0, "mrv_gep");
+    Value *GEP0 = Builder.CreateStructGEP(
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+            DestTy,
+#endif
+            Dest, 0, "mrv_gep");
     Builder.CreateAlignedStore(EVI0, GEP0, 1, isVolatile);
 
     Value *E1Index = ConstantInt::get(Type::getInt32Ty(Context), 1);
     Value *EVI1 = Builder.CreateExtractElement(EVI, E1Index, "mrv.v");
-    Value *GEP1 = Builder.CreateStructGEP(Dest, 1, "mrv_gep");
+    Value *GEP1 = Builder.CreateStructGEP(
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+            DestTy,
+#endif
+            Dest, 1, "mrv_gep");
     Builder.CreateAlignedStore(EVI1, GEP1, 1, isVolatile);
 
-    Value *GEP2 = Builder.CreateStructGEP(Dest, 2, "mrv_gep");
+    Value *GEP2 = Builder.CreateStructGEP(
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+            DestTy,
+#endif
+            Dest, 2, "mrv_gep");
     Value *EVI2 = Builder.CreateExtractValue(Src, 1, "mrv_gr");
     Builder.CreateAlignedStore(EVI2, GEP2, 1, isVolatile);
     return;
@@ -1917,7 +1938,11 @@ void llvm_x86_extract_multiple_return_value(
 
     // Directly access first class values using getresult.
     if (DestElemType->isSingleValueType()) {
-      Value *GEP = Builder.CreateStructGEP(Dest, DNO, "mrv_gep");
+      Value *GEP = Builder.CreateStructGEP(
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+              DestTy,
+#endif
+              Dest, DNO, "mrv_gep");
       Value *EVI = Builder.CreateExtractValue(Src, SNO, "mrv_gr");
       Builder.CreateAlignedStore(EVI, GEP, 1, isVolatile);
       ++DNO;
@@ -2003,7 +2028,6 @@ bool llvm_x86_should_pass_aggregate_in_integer_regs(tree type, unsigned *size,
         *size = Bytes;
       return true;
     }
-#endif
     if (NumClasses == 2 && (Class[0] == X86_64_INTEGERSI_CLASS ||
                             Class[0] == X86_64_INTEGER_CLASS)) {
       if (Class[1] == X86_64_INTEGER_CLASS) {
@@ -2018,6 +2042,7 @@ bool llvm_x86_should_pass_aggregate_in_integer_regs(tree type, unsigned *size,
         return true;
       }
     }
+#endif
     return false;
   } else
     return !isSingleElementStructOrArray(type, false, true);
