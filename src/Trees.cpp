@@ -212,7 +212,13 @@ bool isInt64(const_tree t, bool Unsigned) {
   if (!t)
     return false;
   if (HOST_BITS_PER_WIDE_INT == 64)
-    return host_integerp(t, Unsigned) && !TREE_OVERFLOW(t);
+    return
+#if (GCC_MAJOR > 4)
+        tree_fits_uhwi_p(t)
+#else
+        host_integerp(t, Unsigned)
+#endif
+        && !TREE_OVERFLOW(t);
   assert(HOST_BITS_PER_WIDE_INT == 32 &&
          "Only 32- and 64-bit hosts supported!");
   return (isa<INTEGER_CST>(t) && !TREE_OVERFLOW(t)) &&
@@ -220,7 +226,11 @@ bool isInt64(const_tree t, bool Unsigned) {
           // If the constant is signed and we want an unsigned result, check
           // that the value is non-negative.  If the constant is unsigned and
           // we want a signed result, check it fits in 63 bits.
+#if (GCC_MAJOR > 4)
+          (HOST_WIDE_INT) TREE_INT_CST_NUNITS(t) >= 0);
+#else
           (HOST_WIDE_INT) TREE_INT_CST_HIGH(t) >= 0);
+#endif
 }
 
 /// getInt64 - Extract the value of an INTEGER_CST as a 64 bit integer.  If
@@ -236,7 +246,12 @@ uint64_t getInt64(const_tree t, bool Unsigned) {
   } else {
     assert(HOST_BITS_PER_WIDE_INT == 32 &&
            "Only 32- and 64-bit hosts supported!");
-    unsigned HOST_WIDE_INT HI = (unsigned HOST_WIDE_INT) TREE_INT_CST_HIGH(t);
+    unsigned HOST_WIDE_INT HI = (unsigned HOST_WIDE_INT)
+#if (GCC_MAJOR > 4)
+        TREE_INT_CST_NUNITS(t);
+#else
+        TREE_INT_CST_HIGH(t);
+#endif
     return ((uint64_t) HI << 32) | (uint64_t) LO;
   }
 }
