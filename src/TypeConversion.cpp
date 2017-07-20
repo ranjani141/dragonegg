@@ -50,6 +50,10 @@ extern "C" {
 #include "tree.h"
 
 #include "flags.h"
+#if (GCC_MAJOR > 4)
+#include "print-tree.h"
+#include "calls.h"
+#endif
 #ifndef ENABLE_BUILD_WITH_CXX
 } // extern "C"
 #endif
@@ -59,7 +63,9 @@ extern "C" {
 
 using namespace llvm;
 
-static LLVMContext &Context = getGlobalContext();
+#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
+static LLVMContext &TheContext = getGlobalContext();
+#endif
 
 /// SCCInProgress - Set of mutually dependent types currently being converted.
 static const std::vector<tree_node *> *SCCInProgress;
@@ -264,7 +270,7 @@ int GetFieldIndex(tree decl, Type *Ty) {
   // O(N) rather than O(N log N) if all N fields are used.  It's not clear if it
   // would really be a win though.
 
-  StructType *STy = dyn_cast<StructType>(Ty);
+  StructType *STy = llvm::dyn_cast<StructType>(Ty);
   // If this is not a struct type, then for sure there is no corresponding LLVM
   // field (we do not require GCC record types to be converted to LLVM structs).
   if (!STy)
@@ -300,9 +306,16 @@ int GetFieldIndex(tree decl, Type *Ty) {
 /// getPointerToType - Returns the LLVM register type to use for a pointer to
 /// the given GCC type.
 Type *getPointerToType(tree type) {
-  if (isa<VOID_TYPE>(type))
+  if (isa<VOID_TYPE>(type)) {
     // void* -> byte*
+    LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+        ConvertType(type)->getContext();
+#else
+        TheContext;
+#endif
     return GetUnitPointerType(Context);
+  }
   // FIXME: Handle address spaces.
   return ConvertType(type)->getPointerTo();
 }
@@ -437,6 +450,12 @@ Type *getRegType(tree type) {
   assert(!isa<AGGREGATE_TYPE>(type) && "Registers must have a scalar type!");
   assert(!isa<VOID_TYPE>(type) && "Registers cannot have void type!");
 
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      ConvertType(type)->getContext();
+#else
+      TheContext;
+#endif
   switch (TREE_CODE(type)) {
 
   default:
@@ -504,6 +523,12 @@ Type *getRegType(tree type) {
 static Type *ConvertArrayTypeRecursive(tree type) {
   Type *ElementTy = ConvertType(TREE_TYPE(type));
   uint64_t NumElements = ArrayLengthOf(type);
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      ElementTy->getContext();
+#else
+      TheContext;
+#endif
 
   if (NumElements == NO_LENGTH) // Variable length array?
     NumElements = 0;
@@ -575,6 +600,12 @@ public:
   void HandleShadowResult(PointerType *PtrArgTy, bool RetPtr) {
     // This function either returns void or the shadow argument,
     // depending on the target.
+    LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+        PtrArgTy->getContext();
+#else
+        TheContext;
+#endif
     RetTy = RetPtr ? PtrArgTy : Type::getVoidTy(Context);
 
     // In any case, there is a dummy shadow argument though!
@@ -608,8 +639,15 @@ public:
       if (type == float_type_node)
         LLVMTy = ConvertType(double_type_node);
       else if (LLVMTy->isIntegerTy(16) || LLVMTy->isIntegerTy(8) ||
-               LLVMTy->isIntegerTy(1))
+               LLVMTy->isIntegerTy(1)) {
+        LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+            ConvertType(type)->getContext();
+#else
+            TheContext;
+#endif
         LLVMTy = Type::getInt32Ty(Context);
+      }
     }
     ArgTypes.push_back(LLVMTy);
   }
@@ -659,6 +697,12 @@ FunctionType *ConvertArgListToFnType(
     CallingConv::ID &CallingConv, AttributeSet &PAL) {
   tree ReturnType = TREE_TYPE(type);
   SmallVector<Type *, 8> ArgTys;
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      ConvertType(type)->getContext();
+#else
+      TheContext;
+#endif
   Type *RetTy(Type::getVoidTy(Context));
 
   FunctionTypeConversion Client(RetTy, ArgTys, CallingConv, KNRPromotion);
@@ -672,7 +716,6 @@ FunctionType *ConvertArgListToFnType(
   ABIConverter.HandleReturnType(ReturnType, current_function_decl, false);
 
   SmallVector<AttributeSet, 8> Attrs;
-  LLVMContext &Context = RetTy->getContext();
 
   // Compute whether the result needs to be zext or sext'd.
   AttrBuilder RAttrBuilder;
@@ -729,6 +772,12 @@ FunctionType *ConvertArgListToFnType(
 FunctionType *
 ConvertFunctionType(tree type, tree decl, tree static_chain,
                     CallingConv::ID &CallingConv, AttributeSet &PAL) {
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      ConvertType(type)->getContext();
+#else
+      TheContext;
+#endif
   Type *RetTy = Type::getVoidTy(Context);
   SmallVector<Type *, 8> ArgTypes;
   FunctionTypeConversion Client(RetTy, ArgTypes, CallingConv,
@@ -784,7 +833,6 @@ ConvertFunctionType(tree type, tree decl, tree static_chain,
   }
 
   // Compute whether the result needs to be zext or sext'd.
-  LLVMContext &Context = RetTy->getContext();
   AttrBuilder RAttrBuilder;
   HandleArgumentExtension(TREE_TYPE(type), RAttrBuilder);
 
@@ -836,7 +884,7 @@ ConvertFunctionType(tree type, tree decl, tree static_chain,
   for (; Args && TREE_VALUE(Args) != void_type_node; Args = TREE_CHAIN(Args)) {
     tree ArgTy = TREE_VALUE(Args);
     if (!isPassedByInvisibleReference(ArgTy))
-      if (const StructType *STy = dyn_cast<StructType>(ConvertType(ArgTy)))
+      if (const StructType *STy = llvm::dyn_cast<StructType>(ConvertType(ArgTy)))
         if (STy->isOpaque()) {
           // If we are passing an opaque struct by value, we don't know how many
           // arguments it will turn into.  Because we can't handle this yet,
@@ -914,6 +962,12 @@ static Type *ConvertPointerTypeRecursive(tree type) {
   // pointed to if this would cause trouble (the pointer type is turned into
   // {}* instead).
   tree pointee = main_type(type);
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      ConvertType(type)->getContext();
+#else
+      TheContext;
+#endif
 
   // The pointer type is in the strongly connected component (SCC) currently
   // being converted.  Check whether the pointee is as well.  If there is more
@@ -1032,6 +1086,12 @@ public:
   /// which usually means a multiple of 8.
   Type *extractContents(const DataLayout &DL) {
     assert(R.getWidth() % BITS_PER_UNIT == 0 && "Boundaries not aligned?");
+    LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+        Ty->getContext();
+#else
+        TheContext;
+#endif
     /// If the current value for the type can be used to represent the bits in
     /// the range then just return it.
     if (isSafeToReturnContentsDirectly(DL))
@@ -1048,7 +1108,11 @@ public:
     // byte.  This is not needed for correctness, but helps the optimizers.
     if ((Ty->getPrimitiveSizeInBits() % BITS_PER_UNIT) != 0) {
       unsigned BitWidth =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+          alignTo(Ty->getPrimitiveSizeInBits(), BITS_PER_UNIT);
+#else
           RoundUpToAlignment(Ty->getPrimitiveSizeInBits(), BITS_PER_UNIT);
+#endif
       Ty = IntegerType::get(Context, BitWidth);
       if (isSafeToReturnContentsDirectly(DL))
         return Ty;
@@ -1082,6 +1146,12 @@ void TypedRange::JoinWith(const TypedRange &S) {
   // integer like this is pretty nasty, but as we only get here for bitfields
   // it is fairly harmless.
   R = R.Join(S.R);
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      Ty->getContext();
+#else
+      TheContext;
+#endif
   Ty = IntegerType::get(Context, R.getWidth());
   Starts = R.getFirst();
 }
@@ -1090,6 +1160,12 @@ static Type *ConvertRecordTypeRecursive(tree type) {
   // FIXME: This new logic, especially the handling of bitfields, is untested
   // and probably wrong on big-endian machines.
   assert(TYPE_SIZE(type) && "Incomplete types should be handled elsewhere!");
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      ConvertType(type)->getContext();
+#else
+      TheContext;
+#endif
 
   IntervalList<TypedRange, uint64_t, 8> Layout;
   const DataLayout &DL = getDataLayout();
@@ -1380,6 +1456,13 @@ static Type *ConvertTypeNonRecursive(tree type) {
   assert(type == TYPE_MAIN_VARIANT(type) && "Not converting the main variant!");
   assert(!mayRecurse(type) && "Expected a non-recursive type!");
 
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      ConvertType(type)->getContext();
+#else
+      TheContext;
+#endif
+
   // If we already converted the type, reuse the previous conversion.  Note that
   // this fires for types which are really recursive, such as pointer types, but
   // that we don't consider recursive any more because already converted.
@@ -1573,6 +1656,12 @@ template <> struct GraphTraits<tree> {
 }
 
 Type *ConvertType(tree type) {
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      ConvertType(type)->getContext();
+#else
+      TheContext;
+#endif
   if (type == error_mark_node)
     return Type::getInt32Ty(Context);
 
