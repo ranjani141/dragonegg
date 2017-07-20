@@ -27,6 +27,7 @@
 // LLVM headers
 #include "llvm/MC/SubtargetFeature.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/MDBuilder.h"
 
 // System headers
 #include <gmp.h>
@@ -46,14 +47,21 @@ extern "C" {
 #include "tree.h"
 
 #include "diagnostic.h"
+#if (GCC_MAJOR > 4)
+#include "function.h"
+#include "basic-block.h"
+#include "tree-core.h"
+#include "rtl.h"
+#endif
 #include "gimple.h"
-#if (GCC_MINOR > 6)
+#if GCC_VERSION_CODE > GCC_VERSION(4, 6)
 #include "gimple-pretty-print.h"
 #endif
 #include "toplev.h"
 
 #if (GCC_MAJOR > 4)
-extern void debug_gimple_stmt(gimple *)
+struct stringop_algs;
+extern void debug_gimple_stmt(gimple *);
 #else
 #if GCC_VERSION_CODE == GCC_VERSION(4, 6)
 extern void debug_gimple_stmt(union gimple_statement_d *);
@@ -69,7 +77,11 @@ extern void debug_gimple_stmt(union gimple_statement_d *);
 
 // One day we will do parameter marshalling right: by using CUMULATIVE_ARGS.
 // While waiting for that happy day, just include a chunk of i386.c.
+#if (GCC_MAJOR > 4)
+#include "ABIHack2.inc"
+#else
 #include "ABIHack.inc"
+#endif
 
 using namespace llvm;
 
@@ -898,10 +910,12 @@ bool TreeToLLVM::TargetIntrinsicLower(GimpleTy *stmt, tree fndecl,
         Ops[1] = ConstantInt::get(IntTy, (shiftVal - 16) * 8);
 
         // create i32 constant
+#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
         Function *F =
             Intrinsic::getDeclaration(TheModule, Intrinsic::x86_sse2_psrl_dq);
         Result =
             Builder.CreateCall(F, ArrayRef<Value *>(&Ops[0], 2), "palignr");
+#endif
         Result = Builder.CreateBitCast(Result, ResultType);
         return true;
       }
@@ -925,6 +939,7 @@ bool TreeToLLVM::TargetIntrinsicLower(GimpleTy *stmt, tree fndecl,
   case movntq:
   case movntsd:
   case movntss: {
+#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
     MDNode *Node = MDNode::get(Context, Builder.getInt32(1));
 
     // Convert the type of the pointer to a pointer to the stored type.
@@ -934,6 +949,7 @@ bool TreeToLLVM::TargetIntrinsicLower(GimpleTy *stmt, tree fndecl,
 
     StoreInst *SI = Builder.CreateAlignedStore(Ops[1], Ptr, 16);
     SI->setMetadata(TheModule->getMDKindID("nontemporal"), Node);
+#endif
     return true;
   }
   case rsqrtf: {
@@ -1054,7 +1070,12 @@ bool TreeToLLVM::TargetIntrinsicLower(GimpleTy *stmt, tree fndecl,
     Result = Builder.CreateTruncOrBitCast(Ops[0], Int16Ty);
     Function *ctlz =
         Intrinsic::getDeclaration(TheModule, Intrinsic::ctlz, Int16Ty);
-    Result = Builder.CreateCall2(ctlz, Result, Builder.getTrue());
+    Result =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+        Builder.CreateCall(ctlz, {Result, Builder.getTrue()});
+#else
+        Builder.CreateCall2(ctlz, Result, Builder.getTrue());
+#endif
     return true;
   }
   case ctzs: {
@@ -1063,7 +1084,12 @@ bool TreeToLLVM::TargetIntrinsicLower(GimpleTy *stmt, tree fndecl,
     Result = Builder.CreateTruncOrBitCast(Ops[0], Int16Ty);
     Function *cttz =
         Intrinsic::getDeclaration(TheModule, Intrinsic::cttz, Int16Ty);
-    Result = Builder.CreateCall2(cttz, Result, Builder.getTrue());
+    Result =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+        Builder.CreateCall(cttz, {Result, Builder.getTrue()});
+#else
+        Builder.CreateCall2(cttz, Result, Builder.getTrue());
+#endif
     return true;
   }
   case rdrand16_step:
@@ -1096,11 +1122,13 @@ static bool llvm_x86_64_should_pass_aggregate_in_memory(
     tree TreeType, enum machine_mode Mode) {
   int IntRegs, SSERegs;
   /* If examine_argument return 0, then it's passed byval in memory.*/
+#if (GCC_MAJOR < 5)
   int ret = examine_argument(Mode, TreeType, 0, &IntRegs, &SSERegs);
   if (ret == 0)
     return true;
   if (ret == 1 && IntRegs == 0 && SSERegs == 0) // zero-sized struct
     return true;
+#endif
   return false;
 }
 
@@ -1136,6 +1164,12 @@ bool llvm_x86_32_should_pass_aggregate_in_mixed_regs(
   if (!STy || STy->isPacked())
     return false;
 
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      STy->getContext();
+#else
+      TheContext;
+#endif
   for (unsigned i = 0, e = STy->getNumElements(); i != e; ++i) {
     Type *EltTy = STy->getElementType(i);
     // 32 and 64-bit integers are fine, as are float and double.  Long double
@@ -1172,6 +1206,12 @@ bool llvm_x86_should_pass_aggregate_as_fca(tree type, Type *Ty) {
   // makes it ABI compatible for x86-64. Same for _Complex char and _Complex
   // short in 32-bit.
   Type *EltTy = STy->getElementType(0);
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      EltTy->getContext();
+#else
+      TheContext;
+#endif
   return !((TARGET_64BIT &&
             (EltTy->isIntegerTy() || EltTy == Type::getFloatTy(Context) ||
              EltTy == Type::getDoubleTy(Context))) || EltTy->isIntegerTy(16) ||
@@ -1184,6 +1224,7 @@ bool llvm_x86_should_pass_aggregate_in_memory(tree TreeType, Type *Ty) {
   if (llvm_x86_should_pass_aggregate_as_fca(TreeType, Ty))
     return false;
 
+#if (GCC_MAJOR < 5)
   enum machine_mode Mode = type_natural_mode(TreeType, NULL);
   HOST_WIDE_INT Bytes = (Mode == BLKmode) ? int_size_in_bytes(TreeType) : (int)
                         GET_MODE_SIZE(Mode);
@@ -1197,6 +1238,7 @@ bool llvm_x86_should_pass_aggregate_in_memory(tree TreeType, Type *Ty) {
     return !llvm_x86_32_should_pass_aggregate_in_mixed_regs(TreeType, Ty, Elts);
   }
   return llvm_x86_64_should_pass_aggregate_in_memory(TreeType, Mode);
+#endif
 }
 
 /* count_num_registers_uses - Return the number of GPRs and XMMs parameter
@@ -1205,6 +1247,12 @@ static void count_num_registers_uses(std::vector<Type *> &ScalarElts,
                                      unsigned &NumGPRs, unsigned &NumXMMs) {
   for (size_t i = 0, e = ScalarElts.size(); i != e; ++i) {
     Type *Ty = ScalarElts[i];
+    LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+        Ty->getContext();
+#else
+        TheContext;
+#endif
     if (VectorType *VTy = llvm::dyn_cast<VectorType>(Ty)) {
       if (!TARGET_MACHO)
         continue;
@@ -1286,6 +1334,7 @@ bool llvm_x86_64_should_pass_aggregate_in_mixed_regs(
     return false;
 
   enum x86_64_reg_class Class[MAX_CLASSES];
+#if (GCC_MAJOR < 5)
   enum machine_mode Mode = type_natural_mode(TreeType, NULL);
   bool totallyEmpty = true;
   HOST_WIDE_INT Bytes = (Mode == BLKmode) ? int_size_in_bytes(TreeType) : (int)
@@ -1405,6 +1454,7 @@ bool llvm_x86_64_should_pass_aggregate_in_mixed_regs(
       llvm_unreachable("Unexpected register class!");
     }
   }
+#endif
 
   return !totallyEmpty;
 }
@@ -1563,6 +1613,7 @@ Type *llvm_x86_scalar_type_for_struct_return(tree type, unsigned *Offset) {
     // This logic relies on llvm_suitable_multiple_ret_value_type to have
     // removed anything not expected here.
     enum x86_64_reg_class Class[MAX_CLASSES];
+#if (GCC_MAJOR < 5)
     enum machine_mode Mode = type_natural_mode(type, NULL);
     int NumClasses = classify_argument(Mode, type, Class, 0);
     if (NumClasses == 0)
@@ -1585,6 +1636,7 @@ Type *llvm_x86_scalar_type_for_struct_return(tree type, unsigned *Offset) {
       }
       llvm_unreachable("Unexpected type!");
     }
+#endif
     if (NumClasses == 2) {
       if (Class[1] == X86_64_NO_CLASS) {
         if (Class[0] == X86_64_INTEGER_CLASS || Class[0] == X86_64_NO_CLASS ||
@@ -1629,6 +1681,7 @@ Type *llvm_x86_scalar_type_for_struct_return(tree type, unsigned *Offset) {
 static void llvm_x86_64_get_multiple_return_reg_classes(
     tree TreeType, Type */*Ty*/, std::vector<Type *> &Elts) {
   enum x86_64_reg_class Class[MAX_CLASSES];
+#if (GCC_MAJOR < 5)
   enum machine_mode Mode = type_natural_mode(TreeType, NULL);
   HOST_WIDE_INT Bytes = (Mode == BLKmode) ? int_size_in_bytes(TreeType) : (int)
                         GET_MODE_SIZE(Mode);
@@ -1747,6 +1800,7 @@ static void llvm_x86_64_get_multiple_return_reg_classes(
       llvm_unreachable("Unexpected register class!");
     }
   }
+#endif
 }
 
 // Return LLVM Type if TYPE can be returned as an aggregate,
@@ -1932,6 +1986,7 @@ bool llvm_x86_should_pass_aggregate_in_integer_regs(tree type, unsigned *size,
   *size = 0;
   if (TARGET_64BIT) {
     enum x86_64_reg_class Class[MAX_CLASSES];
+#if (GCC_MAJOR < 5)
     enum machine_mode Mode = type_natural_mode(type, NULL);
     int NumClasses = classify_argument(Mode, type, Class, 0);
     *DontCheckAlignment = true;
@@ -1948,6 +2003,7 @@ bool llvm_x86_should_pass_aggregate_in_integer_regs(tree type, unsigned *size,
         *size = Bytes;
       return true;
     }
+#endif
     if (NumClasses == 2 && (Class[0] == X86_64_INTEGERSI_CLASS ||
                             Class[0] == X86_64_INTEGER_CLASS)) {
       if (Class[1] == X86_64_INTEGER_CLASS) {
