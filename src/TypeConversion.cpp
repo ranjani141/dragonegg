@@ -1642,6 +1642,9 @@ public:
 namespace llvm {
 template <> struct GraphTraits<tree> {
   typedef tree_node NodeType;
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+  typedef tree_node *NodeRef;
+#endif
   typedef RecursiveTypeIterator ChildIteratorType;
   static inline NodeType *getEntryNode(tree t) {
     assert(TYPE_P(t) && "Expected a type!");
@@ -1694,7 +1697,6 @@ Type *ConvertType(tree type) {
   // will be visited first.  Note that this analysis is performed only once: the
   // results of the type conversion are cached, and any future conversion of one
   // of the visited types will just return the cached value.
-#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
   for (scc_iterator<tree> I = scc_begin(type), E = scc_end(type); I != E; ++I) {
     const std::vector<tree> &SCC = *I;
 
@@ -1759,7 +1761,6 @@ Type *ConvertType(tree type) {
         }
       }
   }
-#endif
 
   // At this point every type reachable from this one has been converted, and
   // the conversion results cached.  Return the value computed for the type.
