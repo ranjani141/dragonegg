@@ -79,7 +79,6 @@ extern void debug_gimple_stmt(union gimple_statement_d *);
 // While waiting for that happy day, just include a chunk of i386.c.
 #if (GCC_MAJOR > 4)
 #include "ABIHack6.inc"
-#define MAX_CLASSES 8
 #else
 #include "ABIHack.inc"
 #endif
@@ -1123,13 +1122,26 @@ static bool llvm_x86_64_should_pass_aggregate_in_memory(
     tree TreeType, enum machine_mode Mode) {
   int IntRegs, SSERegs;
   /* If examine_argument return 0, then it's passed byval in memory.*/
-#if (GCC_MAJOR < 5)
-  int ret = examine_argument(Mode, TreeType, 0, &IntRegs, &SSERegs);
-  if (ret == 0)
-    return true;
-  if (ret == 1 && IntRegs == 0 && SSERegs == 0) // zero-sized struct
-    return true;
+#if (GCC_MAJOR > 4)
+  bool ret =
+#else
+  int ret =
 #endif
+      examine_argument(Mode, TreeType, 0, &IntRegs, &SSERegs);
+#if (GCC_MAJOR > 4)
+  if (ret)
+#else
+  if (ret == 0)
+#endif
+    return true;
+  if (
+#if (GCC_MAJOR > 4)
+      !ret
+#else
+      ret == 1
+#endif
+      && IntRegs == 0 && SSERegs == 0) // zero-sized struct
+    return true;
   return false;
 }
 
@@ -1225,7 +1237,6 @@ bool llvm_x86_should_pass_aggregate_in_memory(tree TreeType, Type *Ty) {
   if (llvm_x86_should_pass_aggregate_as_fca(TreeType, Ty))
     return false;
 
-#if (GCC_MAJOR < 5)
   enum machine_mode Mode = type_natural_mode(TreeType, NULL);
   HOST_WIDE_INT Bytes = (Mode == BLKmode) ? int_size_in_bytes(TreeType) : (int)
                         GET_MODE_SIZE(Mode);
@@ -1239,7 +1250,6 @@ bool llvm_x86_should_pass_aggregate_in_memory(tree TreeType, Type *Ty) {
     return !llvm_x86_32_should_pass_aggregate_in_mixed_regs(TreeType, Ty, Elts);
   }
   return llvm_x86_64_should_pass_aggregate_in_memory(TreeType, Mode);
-#endif
 }
 
 /* count_num_registers_uses - Return the number of GPRs and XMMs parameter
@@ -1335,7 +1345,6 @@ bool llvm_x86_64_should_pass_aggregate_in_mixed_regs(
     return false;
 
   enum x86_64_reg_class Class[MAX_CLASSES];
-#if (GCC_MAJOR < 5)
   enum machine_mode Mode = type_natural_mode(TreeType, NULL);
   bool totallyEmpty = true;
   HOST_WIDE_INT Bytes = (Mode == BLKmode) ? int_size_in_bytes(TreeType) : (int)
@@ -1348,6 +1357,12 @@ bool llvm_x86_64_should_pass_aggregate_in_mixed_regs(
     // This will fit in one i32 register.
     return false;
 
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      Ty->getContext();
+#else
+      TheContext;
+#endif
   for (int i = 0; i < NumClasses; ++i) {
     switch (Class[i]) {
     case X86_64_INTEGER_CLASS:
@@ -1457,7 +1472,6 @@ bool llvm_x86_64_should_pass_aggregate_in_mixed_regs(
   }
 
   return !totallyEmpty;
-#endif
 }
 
 /* On Darwin x86-32, vectors which are not MMX nor SSE should be passed as
@@ -1571,7 +1585,6 @@ static bool llvm_suitable_multiple_ret_value_type(Type *Ty, tree TreeType) {
 
   // Let gcc specific routine answer the question.
   enum x86_64_reg_class Class[MAX_CLASSES];
-#if (GCC_MAJOR < 5)
   enum machine_mode Mode = type_natural_mode(TreeType, NULL);
   int NumClasses = classify_argument(Mode, TreeType, Class, 0);
   if (NumClasses == 0)
@@ -1587,7 +1600,6 @@ static bool llvm_suitable_multiple_ret_value_type(Type *Ty, tree TreeType) {
     // One word is padding which is not passed at all; treat this as returning
     // the scalar type of the other word.
     return false;
-#endif
 
   // Otherwise, use of multiple value return is OK.
   return true;
@@ -1622,7 +1634,6 @@ Type *llvm_x86_scalar_type_for_struct_return(tree type, unsigned *Offset) {
     // This logic relies on llvm_suitable_multiple_ret_value_type to have
     // removed anything not expected here.
     enum x86_64_reg_class Class[MAX_CLASSES];
-#if (GCC_MAJOR < 5)
     enum machine_mode Mode = type_natural_mode(type, NULL);
     int NumClasses = classify_argument(Mode, type, Class, 0);
     if (NumClasses == 0)
@@ -1670,7 +1681,6 @@ Type *llvm_x86_scalar_type_for_struct_return(tree type, unsigned *Offset) {
       llvm_unreachable("Unexpected type!");
     }
     llvm_unreachable("Unexpected type!");
-#endif
   } else {
     if (Size <= 8)
       return Type::getInt64Ty(Context);
@@ -1690,7 +1700,6 @@ Type *llvm_x86_scalar_type_for_struct_return(tree type, unsigned *Offset) {
 static void llvm_x86_64_get_multiple_return_reg_classes(
     tree TreeType, Type */*Ty*/, std::vector<Type *> &Elts) {
   enum x86_64_reg_class Class[MAX_CLASSES];
-#if (GCC_MAJOR < 5)
   enum machine_mode Mode = type_natural_mode(TreeType, NULL);
   HOST_WIDE_INT Bytes = (Mode == BLKmode) ? int_size_in_bytes(TreeType) : (int)
                         GET_MODE_SIZE(Mode);
@@ -1709,6 +1718,12 @@ static void llvm_x86_64_get_multiple_return_reg_classes(
   if (NumClasses == 1 && Class[0] == X86_64_NO_CLASS)
     return;
 
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      TheModule->getContext();
+#else
+      TheContext;
+#endif
   for (int i = 0; i < NumClasses; ++i) {
     switch (Class[i]) {
     case X86_64_INTEGER_CLASS:
@@ -1809,7 +1824,6 @@ static void llvm_x86_64_get_multiple_return_reg_classes(
       llvm_unreachable("Unexpected register class!");
     }
   }
-#endif
 }
 
 // Return LLVM Type if TYPE can be returned as an aggregate,
@@ -2011,7 +2025,6 @@ bool llvm_x86_should_pass_aggregate_in_integer_regs(tree type, unsigned *size,
   *size = 0;
   if (TARGET_64BIT) {
     enum x86_64_reg_class Class[MAX_CLASSES];
-#if (GCC_MAJOR < 5)
     enum machine_mode Mode = type_natural_mode(type, NULL);
     int NumClasses = classify_argument(Mode, type, Class, 0);
     *DontCheckAlignment = true;
@@ -2042,7 +2055,6 @@ bool llvm_x86_should_pass_aggregate_in_integer_regs(tree type, unsigned *size,
         return true;
       }
     }
-#endif
     return false;
   } else
     return !isSingleElementStructOrArray(type, false, true);
