@@ -23,6 +23,9 @@
 // Plugin headers
 #include "dragonegg/ABI.h"
 
+// LLVM headers
+#include "llvm/IR/Module.h"
+
 // System headers
 #include <gmp.h>
 
@@ -353,8 +356,7 @@ void DefaultABI::PassInIntegerRegisters(
   else
     Size = TREE_INT_CST_LOW(TYPE_SIZE(type)) / 8;
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-  Type *Ty = ConvertType(type);
-  LLVMContext &Context = Ty->getContext();
+  LLVMContext &Context = TheModule->getContext();
 #else
   LLVMContext &Context = getGlobalContext();
 #endif

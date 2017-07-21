@@ -31,6 +31,7 @@
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/MDBuilder.h"
 #include "llvm/IR/Metadata.h"
+#include "llvm/IR/Module.h"
 
 // System headers
 #include <gmp.h>
@@ -62,7 +63,7 @@ using namespace llvm;
 
 // https://reviews.llvm.org/D19094
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-static LLVMContext Context;
+static LLVMContext &Context = TheModule->getContext();
 #else
 static LLVMContext &Context = getGlobalContext();
 #endif

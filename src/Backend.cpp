@@ -964,7 +964,12 @@ static void CreateStructorsList(std::vector<std::pair<Constant *, int> > &Tors,
   std::vector<Constant *> StructInit;
   StructInit.resize(2);
 
-  LLVMContext &Context = TheContext;
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      TheModule->getContext();
+#else
+      TheContext;
+#endif
 
   Type *FPTy =
       FunctionType::get(Type::getVoidTy(Context), std::vector<Type *>(), false);
@@ -988,7 +993,13 @@ static void CreateStructorsList(std::vector<std::pair<Constant *, int> > &Tors,
 /// global if possible.
 Constant *ConvertMetadataStringToGV(const char *str) {
 
-  Constant *Init = ConstantDataArray::getString(TheContext, str);
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      TheModule->getContext();
+#else
+      TheContext;
+#endif
+  Constant *Init = ConstantDataArray::getString(Context, str);
 
   // Use cached string if it exists.
   static std::map<Constant *, GlobalVariable *> StringCSTCache;
@@ -1009,7 +1020,12 @@ Constant *ConvertMetadataStringToGV(const char *str) {
 /// AddAnnotateAttrsToGlobal - Adds decls that have a annotate attribute to a
 /// vector to be emitted later.
 void AddAnnotateAttrsToGlobal(GlobalValue *GV, tree decl) {
-  LLVMContext &Context = TheContext;
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      TheModule->getContext();
+#else
+      TheContext;
+#endif
 
   // Handle annotate attribute on global.
   tree annotateAttr = lookup_attribute("annotate", DECL_ATTRIBUTES(decl));
@@ -1458,7 +1474,7 @@ Value *make_decl_llvm(tree decl) {
 
   LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-      ConvertType(TREE_TYPE(decl))->getContext();
+      TheModule->getContext();
 #else
       TheContext;
 #endif
@@ -1820,7 +1836,7 @@ static void llvm_start_unit(void */*gcc_data*/, void */*user_data*/) {
   // LLVM codegen takes care of this, and we don't want them decorated twice.
   targetm.mangle_decl_assembler_name = default_mangle_decl_assembler_name;
 
-#if (GCC_MINOR > 7)
+#if GCC_VERSION_CODE > GCC_VERSION(4, 7)
   // Arrange for a special .ident directive identifying the compiler and plugin
   // versions to be inserted into the final assembler.
   targetm.asm_out.output_ident = output_ident;
@@ -2116,7 +2132,12 @@ static void llvm_finish_unit(void */*gcc_data*/, void */*user_data*/) {
     TheDebugInfo = 0;
   }
 
-  LLVMContext &Context = TheContext;
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      TheModule->getContext();
+#else
+      TheContext;
+#endif
 
   createPerFunctionOptimizationPasses();
 

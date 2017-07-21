@@ -30,6 +30,7 @@
 // LLVM headers
 #include "llvm/ADT/SCCIterator.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/IR/Module.h"
 
 // System headers
 #include <gmp.h>
@@ -63,9 +64,7 @@ extern "C" {
 
 using namespace llvm;
 
-#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-static LLVMContext TheContext;
-#else
+#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
 static LLVMContext &TheContext = getGlobalContext();
 #endif
 
@@ -312,7 +311,7 @@ Type *getPointerToType(tree type) {
     // void* -> byte*
     LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-        ConvertType(type)->getContext();
+        TheModule->getContext();
 #else
         TheContext;
 #endif
@@ -454,7 +453,7 @@ Type *getRegType(tree type) {
 
   LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-      ConvertType(type)->getContext();
+      TheModule->getContext();
 #else
       TheContext;
 #endif
@@ -644,7 +643,7 @@ public:
                LLVMTy->isIntegerTy(1)) {
         LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-            ConvertType(type)->getContext();
+            TheModule->getContext();
 #else
             TheContext;
 #endif
@@ -701,7 +700,7 @@ FunctionType *ConvertArgListToFnType(
   SmallVector<Type *, 8> ArgTys;
   LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-      ConvertType(type)->getContext();
+      TheModule->getContext();
 #else
       TheContext;
 #endif
@@ -776,7 +775,7 @@ ConvertFunctionType(tree type, tree decl, tree static_chain,
                     CallingConv::ID &CallingConv, AttributeSet &PAL) {
   LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-      ConvertType(type)->getContext();
+      TheModule->getContext();
 #else
       TheContext;
 #endif
@@ -966,7 +965,7 @@ static Type *ConvertPointerTypeRecursive(tree type) {
   tree pointee = main_type(type);
   LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-      ConvertType(type)->getContext();
+      TheModule->getContext();
 #else
       TheContext;
 #endif
@@ -1090,7 +1089,7 @@ public:
     assert(R.getWidth() % BITS_PER_UNIT == 0 && "Boundaries not aligned?");
     LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-        Ty->getContext();
+        Ty ? Ty->getContext() : TheModule->getContext();
 #else
         TheContext;
 #endif
@@ -1150,7 +1149,7 @@ void TypedRange::JoinWith(const TypedRange &S) {
   R = R.Join(S.R);
   LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-      Ty->getContext();
+      Ty ? Ty->getContext() : TheModule->getContext();
 #else
       TheContext;
 #endif
@@ -1164,7 +1163,7 @@ static Type *ConvertRecordTypeRecursive(tree type) {
   assert(TYPE_SIZE(type) && "Incomplete types should be handled elsewhere!");
   LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-      ConvertType(type)->getContext();
+      TheModule->getContext();
 #else
       TheContext;
 #endif
@@ -1460,7 +1459,7 @@ static Type *ConvertTypeNonRecursive(tree type) {
 
   LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-      ConvertType(type)->getContext();
+      TheModule->getContext();
 #else
       TheContext;
 #endif
@@ -1658,7 +1657,12 @@ template <> struct GraphTraits<tree> {
 }
 
 Type *ConvertType(tree type) {
-  LLVMContext &Context = TheContext;
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      TheModule->getContext();
+#else
+      TheContext;
+#endif
   if (type == error_mark_node)
     return Type::getInt32Ty(Context);
 

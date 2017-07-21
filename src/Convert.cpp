@@ -130,9 +130,7 @@ extern void debug_gimple_stmt(gimple *stmt);
 // Trees header.
 #include "dragonegg/Trees.h"
 
-#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-static LLVMContext TheContext;
-#else
+#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
 static LLVMContext &TheContext = getGlobalContext();
 #endif
 
@@ -381,7 +379,7 @@ static MDNode *describeTypeRange(tree type) {
 
   LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-      ConvertType(TREE_TYPE(type))->getContext();
+      TheModule->getContext();
 #else
       TheContext;
 #endif
@@ -466,7 +464,7 @@ static Value *LoadRegisterFromMemory(MemRef Loc, tree type, MDNode *AliasTag,
 
   LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-      ConvertType(TREE_TYPE(type))->getContext();
+      RegTy->getContext();
 #else
       TheContext;
 #endif
@@ -558,7 +556,7 @@ static void StoreRegisterToMemory(Value *V, MemRef Loc, tree type,
 
   LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-      ConvertType(TREE_TYPE(type))->getContext();
+      V->getType()->getContext();
 #else
       TheContext;
 #endif
@@ -768,7 +766,7 @@ static void llvm_store_scalar_argument(Value *Loc, Value *ArgVal,
     assert(ArgVal->getType()->isIntegerTy() && "Expected an integer value!");
     LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-        LLVMTy->getContext();
+        ArgVal->getType()->getContext();
 #else
         TheContext;
 #endif
@@ -918,7 +916,7 @@ struct FunctionPrologArgumentConversion : public DefaultABIClient {
       // the smaller alignment.
       LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-          ConvertType(TREE_TYPE(type))->getContext();
+          Loc->getType()->getContext();
 #else
           TheContext;
 #endif
@@ -1008,7 +1006,7 @@ void TreeToLLVM::StartFunctionBody() {
   AttributeSet PAL;
   LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-      FTy->getContext();
+      TheModule->getContext();
 #else
       TheContext;
 #endif
@@ -1631,7 +1629,13 @@ BasicBlock *TreeToLLVM::getBasicBlock(basic_block bb) {
     return I->second;
 
   // Otherwise, create a new LLVM basic block.
-  BasicBlock *BB = BasicBlock::Create(TheContext);
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      TheModule->getContext();
+#else
+      TheContext;
+#endif
+  BasicBlock *BB = BasicBlock::Create(Context);
 
   // All basic blocks that directly correspond to GCC basic blocks (those
   // created here) must have a name.  All artificial basic blocks produced
@@ -2769,9 +2773,15 @@ BasicBlock *TreeToLLVM::getFailureBlock(int RegionNo) {
     FailureBlocks.resize(RegionNo + 1, 0);
 
   BasicBlock *&FailureBlock = FailureBlocks[RegionNo];
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      TheModule->getContext();
+#else
+      TheContext;
+#endif
 
   if (!FailureBlock)
-    FailureBlock = BasicBlock::Create(TheContext, "fail");
+    FailureBlock = BasicBlock::Create(Context, "fail");
 
   return FailureBlock;
 }
@@ -3883,7 +3893,7 @@ CallInst *TreeToLLVM::EmitSimpleCall(StringRef CalleeName, tree ret_type,
 
   LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-      ConvertType(TREE_TYPE(ret_type))->getContext();
+      TheModule->getContext();
 #else
       TheContext;
 #endif
@@ -4573,7 +4583,7 @@ TreeToLLVM::BuildCmpAndSwapAtomic(GimpleTy *stmt, unsigned Bits, bool isBool) {
   // The type loaded from/stored to memory.
   LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-      ConvertType(TREE_TYPE(ptr))->getContext();
+      TheModule->getContext();
 #else
       TheContext;
 #endif
@@ -4651,7 +4661,7 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
 
   LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-      ConvertType(TREE_TYPE(fndecl))->getContext();
+      TheModule->getContext();
 #else
       TheContext;
 #endif
@@ -7535,7 +7545,7 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
       // Create a builder that inserts code before the SSAInsertionPoint marker.
       LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-          ConvertType(TREE_TYPE(reg))->getContext();
+          TheModule->getContext();
 #else
           TheContext;
 #endif
@@ -7561,7 +7571,7 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
     Value *TreeToLLVM::EmitReg_ABS_EXPR(tree op) {
       LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-          ConvertType(TREE_TYPE(op))->getContext();
+          TheModule->getContext();
 #else
           TheContext;
 #endif
@@ -9240,10 +9250,16 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
 
       // Compute the return type to use for the asm call.
       Type *CallResultType;
+      LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+          TheModule->getContext();
+#else
+          TheContext;
+#endif
       switch (CallResultTypes.size()) {
         // If there are no results then the return type is void!
       case 0:
-        CallResultType = Type::getVoidTy(TheContext);
+        CallResultType = Type::getVoidTy(Context);
         break;
         // If there is one result then use the result's type as the return type.
       case 1:
@@ -9255,7 +9271,7 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
         SmallVector<Type *, 4> Fields((unsigned) CallResultTypes.size());
         for (unsigned i = 0, e = (unsigned) CallResultTypes.size(); i != e; ++i)
           Fields[i] = CallResultTypes[i].first;
-        CallResultType = StructType::get(TheContext, Fields);
+        CallResultType = StructType::get(Context, Fields);
         break;
       }
 
@@ -9601,7 +9617,7 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
 
       LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-          ConvertType(TREE_TYPE(retval))->getContext();
+          TheModule->getContext();
 #else
           TheContext;
 #endif

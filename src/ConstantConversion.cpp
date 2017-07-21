@@ -32,6 +32,7 @@
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/GlobalVariable.h"
 #include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/Module.h"
 #include "llvm/Support/Host.h"
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
 #include "llvm/Target/TargetMachine.h"
@@ -113,11 +114,11 @@ class BitSlice {
   }
 
   /// ExtendRange - Extend the slice to a wider range.  All added bits are zero.
-  BitSlice ExtendRange(SignedRange r, TargetFolder &Folder, Type *Ty) const;
+  BitSlice ExtendRange(SignedRange r, TargetFolder &Folder) const;
 
   /// ReduceRange - Reduce the slice to a smaller range discarding any bits that
   /// do not belong to the new range.
-  BitSlice ReduceRange(SignedRange r, TargetFolder &Folder, Type *Ty) const;
+  BitSlice ReduceRange(SignedRange r, TargetFolder &Folder) const;
 
 public:
   /// BitSlice - Default constructor: empty bit range.
@@ -160,18 +161,18 @@ public:
   /// returned value corresponds to the first bit of the range (aka "First"),
   /// while on big-endian machines it corresponds to the last bit of the range
   /// (aka "Last-1").
-  Constant *getBits(SignedRange r, TargetFolder &Folder, Type *Ty) const;
+  Constant *getBits(SignedRange r, TargetFolder &Folder) const;
 
   /// Merge - Join the slice with another (which must be disjoint), forming the
   /// convex hull of the ranges.  The bits in the range of one of the slices are
   /// those of that slice.  Any other bits have an undefined value.
-  void Merge(const BitSlice &other, TargetFolder &Folder, Type *Ty);
+  void Merge(const BitSlice &other, TargetFolder &Folder);
 };
 
 } // Unnamed namespace.
 
 /// ExtendRange - Extend the slice to a wider range.  All added bits are zero.
-BitSlice BitSlice::ExtendRange(SignedRange r, TargetFolder &Folder, Type *Ty) const {
+BitSlice BitSlice::ExtendRange(SignedRange r, TargetFolder &Folder) const {
   assert(r.contains(R) && "Not an extension!");
   // Quick exit if the range did not actually increase.
   if (R == r)
@@ -179,7 +180,7 @@ BitSlice BitSlice::ExtendRange(SignedRange r, TargetFolder &Folder, Type *Ty) co
   assert(!r.empty() && "Empty ranges did not evaluate as equal?");
   LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-    Ty->getContext();
+    Contents ? Contents->getType()->getContext() : TheModule->getContext();
 #else
     TheContext;
 #endif
@@ -211,14 +212,14 @@ BitSlice BitSlice::ExtendRange(SignedRange r, TargetFolder &Folder, Type *Ty) co
 /// returned value corresponds to the first bit of the range (aka "First"),
 /// while on big-endian machines it corresponds to the last bit of the range
 /// (aka "Last-1").
-Constant *BitSlice::getBits(SignedRange r, TargetFolder &Folder, Type *Ty) const {
+Constant *BitSlice::getBits(SignedRange r, TargetFolder &Folder) const {
   assert(!r.empty() && "Bit range is empty!");
   // Quick exit if the desired range matches that of the slice.
   if (R == r)
     return Contents;
   LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-    Ty->getContext();
+    Contents ? Contents->getType()->getContext() : TheModule->getContext();
 #else
     TheContext;
 #endif
@@ -227,9 +228,9 @@ Constant *BitSlice::getBits(SignedRange r, TargetFolder &Folder, Type *Ty) const
   if (empty())
     return UndefValue::get(RetTy);
   // Extend to the convex hull of the two ranges.
-  BitSlice Slice = ExtendRange(R.Join(r), Folder, Ty);
+  BitSlice Slice = ExtendRange(R.Join(r), Folder);
   // Chop the slice down to the requested range.
-  Slice = Slice.ReduceRange(r, Folder, Ty);
+  Slice = Slice.ReduceRange(r, Folder);
   // Now we can just return the bits contained in the slice.
   return Slice.Contents;
 }
@@ -237,7 +238,7 @@ Constant *BitSlice::getBits(SignedRange r, TargetFolder &Folder, Type *Ty) const
 /// Merge - Join the slice with another (which must be disjoint), forming the
 /// convex hull of the ranges.  The bits in the range of one of the slices are
 /// those of that slice.  Any other bits have an undefined value.
-void BitSlice::Merge(const BitSlice &other, TargetFolder &Folder, Type *Ty) {
+void BitSlice::Merge(const BitSlice &other, TargetFolder &Folder) {
   // If the other slice is empty, the result is this slice.
   if (other.empty())
     return;
@@ -250,8 +251,8 @@ void BitSlice::Merge(const BitSlice &other, TargetFolder &Folder, Type *Ty) {
 
   // Extend each slice to the convex hull of the ranges.
   SignedRange Hull = R.Join(other.getRange());
-  BitSlice ExtThis = ExtendRange(Hull, Folder, Ty);
-  BitSlice ExtOther = other.ExtendRange(Hull, Folder, Ty);
+  BitSlice ExtThis = ExtendRange(Hull, Folder);
+  BitSlice ExtOther = other.ExtendRange(Hull, Folder);
 
   // Since the slices are disjoint and all added bits are zero they can be
   // joined via a simple 'or'.
@@ -260,7 +261,7 @@ void BitSlice::Merge(const BitSlice &other, TargetFolder &Folder, Type *Ty) {
 
 /// ReduceRange - Reduce the slice to a smaller range discarding any bits that
 /// do not belong to the new range.
-BitSlice BitSlice::ReduceRange(SignedRange r, TargetFolder &Folder, Type *Ty) const {
+BitSlice BitSlice::ReduceRange(SignedRange r, TargetFolder &Folder) const {
   assert(R.contains(r) && "Not a reduction!");
   // Quick exit if the range did not actually decrease.
   if (R == r)
@@ -285,7 +286,7 @@ BitSlice BitSlice::ReduceRange(SignedRange r, TargetFolder &Folder, Type *Ty) co
   // Truncate to the new type.
   LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-    Ty->getContext();
+    C ? C->getType()->getContext() : TheModule->getContext();
 #else
     TheContext;
 #endif
@@ -368,7 +369,7 @@ static BitSlice ViewAsBits(Constant *C, SignedRange R, TargetFolder &Folder) {
       assert(!NeededBits.empty() && "Used element computation wrong!");
       BitSlice EltBits = ViewAsBits(Elt, NeededBits, Folder);
       // Add to the already known bits.
-      Bits.Merge(EltBits.Displace(EltOffsetInBits), Folder, Ty);
+      Bits.Merge(EltBits.Displace(EltOffsetInBits), Folder);
     }
     return Bits;
   }
@@ -396,7 +397,7 @@ static BitSlice ViewAsBits(Constant *C, SignedRange R, TargetFolder &Folder) {
       if (!NeededBits.empty()) { // No field bits needed if only using padding.
         BitSlice FieldBits = ViewAsBits(Field, NeededBits, Folder);
         // Add to the already known bits.
-        Bits.Merge(FieldBits.Displace(FieldOffsetInBits), Folder, Ty);
+        Bits.Merge(FieldBits.Displace(FieldOffsetInBits), Folder);
       }
     }
     return Bits;
@@ -426,7 +427,7 @@ static BitSlice ViewAsBits(Constant *C, SignedRange R, TargetFolder &Folder) {
       assert(!NeededBits.empty() && "Used element computation wrong!");
       BitSlice EltBits = ViewAsBits(Elt, NeededBits, Folder);
       // Add to the already known bits.
-      Bits.Merge(EltBits.Displace(EltOffsetInBits), Folder, Ty);
+      Bits.Merge(EltBits.Displace(EltOffsetInBits), Folder);
     }
     return Bits;
   }
@@ -475,8 +476,8 @@ InterpretAsType(Constant *C, Type *Ty, int StartingBit, TargetFolder &Folder) {
     // the end on little-endian machines.
     Bits = Bits.Displace(-StartingBit);
     return BYTES_BIG_ENDIAN
-           ? Bits.getBits(SignedRange(StoreSize - BitWidth, StoreSize), Folder, Ty)
-           : Bits.getBits(SignedRange(0, BitWidth), Folder, Ty);
+           ? Bits.getBits(SignedRange(StoreSize - BitWidth, StoreSize), Folder)
+           : Bits.getBits(SignedRange(0, BitWidth), Folder);
   }
 
   case Type::PointerTyID: {
@@ -564,10 +565,9 @@ static Constant *ExtractRegisterFromConstantImpl(
     // This roundabout approach means we get the right result on both little and
     // big endian machines.
     unsigned Size = GET_MODE_BITSIZE(TYPE_MODE(type));
-    Type *Ty = ConvertType(type);
     LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-        Ty->getContext();
+        C ? C->getType()->getContext() : TheModule->getContext();
 #else
         TheContext;
 #endif
@@ -648,10 +648,9 @@ RepresentAsMemory(Constant *C, tree type, TargetFolder &Folder) {
   // NOTE: Needs to be kept in sync with ExtractRegisterFromConstant.
   assert(C->getType() == getRegType(type) && "Constant has wrong type!");
   Constant *Result;
-  Type *Ty = ConvertType(type);
   LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-      Ty->getContext();
+      C->getType()->getContext();
 #else
       TheContext;
 #endif
@@ -789,10 +788,9 @@ static Constant *ConvertCST(tree exp, TargetFolder &) {
   (void)
       CharsWritten; // Avoid unused variable warning when assertions disabled.
                     // Turn it into an LLVM byte array.
-  Type *Ty = ConvertType(type);
   LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-      Ty->getContext();
+      TheModule->getContext();
 #else
       TheContext;
 #endif
@@ -1090,7 +1088,7 @@ class FieldContents {
       return 0;
     LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-        C->getType()->getContext();
+        C ? C->getType()->getContext() : TheModule->getContext();
 #else
         TheContext;
 #endif
@@ -1163,7 +1161,7 @@ public:
       return C;
     LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-        C->getType()->getContext();
+        C ? C->getType()->getContext() : TheModule->getContext();
 #else
         TheContext;
 #endif
@@ -1221,9 +1219,9 @@ void FieldContents::JoinWith(const FieldContents &S) {
   // together.  This can result in a nasty integer constant expression, but as
   // we only get here for bitfields that's mostly harmless.
   BitSlice Bits(R, getAsBits());
-  Bits.Merge(BitSlice(S.R, S.getAsBits()), Folder, C->getType());
+  Bits.Merge(BitSlice(S.R, S.getAsBits()), Folder);
   R = Bits.getRange();
-  C = Bits.getBits(R, Folder, C->getType());
+  C = Bits.getBits(R, Folder);
   Starts = R.empty() ? 0 : R.getFirst();
 }
 
@@ -1476,7 +1474,7 @@ static Constant *ConvertPOINTER_PLUS_EXPR(tree exp, TargetFolder &Folder) {
   Constant *Idx = getAsRegister(TREE_OPERAND(exp, 1), Folder); // Offset (units)
   LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-      ConvertType(main_type(exp))->getContext();
+      Ptr->getType()->getContext();
 #else
       TheContext;
 #endif
@@ -1684,7 +1682,7 @@ static Constant *AddressOfCOMPONENT_REF(tree exp, TargetFolder &Folder) {
   tree field_decl = TREE_OPERAND(exp, 1);
 
   // Compute the field offset in units from the start of the record.
-  Constant *Offset;
+  Constant *Offset = NULL;
   if (TREE_OPERAND(exp, 2)) {
     Offset = getAsRegister(TREE_OPERAND(exp, 2), Folder);
     // At this point the offset is measured in units divided by (exactly)
@@ -1713,7 +1711,7 @@ static Constant *AddressOfCOMPONENT_REF(tree exp, TargetFolder &Folder) {
 
   LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-      ConvertType(main_type(exp))->getContext();
+      Offset ? Offset->getType()->getContext() : TheModule->getContext();
 #else
       TheContext;
 #endif
@@ -1784,7 +1782,7 @@ static Constant *AddressOfMEM_REF(tree exp, TargetFolder &Folder) {
 
 /// AddressOfImpl - Implementation of AddressOf.
 static Constant *AddressOfImpl(tree exp, TargetFolder &Folder) {
-  Constant *Addr;
+  Constant *Addr = NULL;
 
   switch (TREE_CODE(exp)) {
   default:
@@ -1837,7 +1835,7 @@ static Constant *AddressOfImpl(tree exp, TargetFolder &Folder) {
   Type *Ty;
   LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-      ConvertType(main_type(exp))->getContext();
+      Addr ? Addr->getType()->getContext() : TheModule->getContext();
 #else
       TheContext;
 #endif
