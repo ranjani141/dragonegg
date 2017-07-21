@@ -30,10 +30,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "tm_p.h"
 #include "stringpool.h"
 #include "expmed.h"
-//#include "optabs.h"
 #include "regs.h"
 #include "emit-rtl.h"
-//#include "recog.h"
 #include "cgraph.h"
 #include "diagnostic.h"
 #include "cfgbuild.h"
@@ -44,18 +42,13 @@ along with GCC; see the file COPYING3.  If not see
 #include "stor-layout.h"
 #include "varasm.h"
 #include "output.h"
-//#include "insn-attr.h"
 #include "flags.h"
 #include "except.h"
 #include "explow.h"
 #include "expr.h"
 #include "cfgrtl.h"
-//#include "common/common-target.h"
 #include "langhooks.h"
-//#include "reload.h"
 #include "gimplify.h"
-//#include "dwarf2.h"
-//#include "tm-constrs.h"
 #include "params.h"
 #include "cselib.h"
 #include "sched-int.h"
@@ -73,14 +66,10 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-chkp.h"
 #include "rtl-chkp.h"
 #include "dbgcnt.h"
-//#include "case-cfn-macros.h"
 #include "regrename.h"
 #include "dojump.h"
 #include "fold-const-call.h"
 #include "tree-ssanames.h"
-
-/* This file should be included last.  */
-//#include "target-def.h"
 
 static rtx legitimize_dllimport_symbol (rtx, bool);
 static rtx legitimize_pe_coff_extern_decl (rtx, bool);
@@ -2207,7 +2196,6 @@ const struct processor_costs *ix86_cost = &pentium_cost;
 const char* ix86_tune_feature_names[X86_TUNE_LAST] = {
 #undef DEF_TUNE
 #define DEF_TUNE(tune, name, selector) name,
-//#include "x86-tune.def"
 #undef DEF_TUNE
 };
 
@@ -2219,7 +2207,6 @@ unsigned char ix86_tune_features[X86_TUNE_LAST];
 static unsigned int initial_ix86_tune_features[X86_TUNE_LAST] = {
 #undef DEF_TUNE
 #define DEF_TUNE(tune, name, selector) selector,
-//#include "x86-tune.def"
 #undef DEF_TUNE
 };
 
