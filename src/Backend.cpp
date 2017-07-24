@@ -519,8 +519,27 @@ static std::string ComputeTargetTriple() {
   return NewTriple;
 }
 
+static void setNoFramePointerElim(bool NoFramePointerElim) {
+  for (auto &F : *TheModule) {
+    auto Attrs = F.getAttributes();
+    StringRef Value(NoFramePointerElim ? "false" : "true");
+    Attrs = Attrs.addAttribute(F.getContext(),
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 9)
+                               AttributeList::FunctionIndex,
+#else
+                               AttributeSet::FunctionIndex,
+#endif
+                               "no-frame-pointer-elim", Value);
+    F.setAttributes(Attrs);
+  }
+}
+
 /// CreateTargetMachine - Create the TargetMachine we will generate code with.
 static void CreateTargetMachine(const std::string &TargetTriple) {
+  // Create the module itself.
+  StringRef ModuleID = main_input_filename ? main_input_filename : "";
+  TheModule = new Module(ModuleID, TheContext);
+
   // FIXME: Figure out how to select the target and pass down subtarget info.
   std::string Err;
   const Target *TME = TargetRegistry::lookupTarget(TargetTriple, Err);
@@ -559,17 +578,19 @@ static void CreateTargetMachine(const std::string &TargetTriple) {
 
   TargetOptions Options;
 
+  // https://reviews.llvm.org/D9830
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+  setNoFramePointerElim(flag_omit_frame_pointer);
+#else
   if (flag_omit_frame_pointer) {
     // Eliminate frame pointers everywhere.
-#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
     Options.NoFramePointerElim = false;
-#endif
   } else {
     // Keep frame pointers everywhere.
-#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
     Options.NoFramePointerElim = true;
-#endif
   }
+#endif
+
   // If a target has an option to eliminate frame pointers in leaf functions
   // only then it should set
   //   NoFramePointerElim = false;
@@ -608,8 +629,9 @@ static void CreateTargetMachine(const std::string &TargetTriple) {
 #endif
 
 #ifdef LLVM_SET_TARGET_MACHINE_OPTIONS
-  // https://reviews.llvm.org/D9830
-#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+  setNoFramePointerElim(TARGET_OMIT_LEAF_FRAME_POINTER);
+#else
   LLVM_SET_TARGET_MACHINE_OPTIONS(Options);
 #endif
 #endif
@@ -649,7 +671,8 @@ static void output_ident(const char *ident_str) {
 static void CreateModule(const std::string &TargetTriple) {
   // Create the module itself.
   StringRef ModuleID = main_input_filename ? main_input_filename : "";
-  TheModule = new Module(ModuleID, TheContext);
+  if (!TheModule)
+    TheModule = new Module(ModuleID, TheContext);
 
 #if GCC_VERSION_CODE < GCC_VERSION(4, 8)
 #ifdef IDENT_ASM_OP
