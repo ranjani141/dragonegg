@@ -939,8 +939,11 @@ bool TreeToLLVM::TargetIntrinsicLower(GimpleTy *stmt, tree fndecl,
   case movntq:
   case movntsd:
   case movntss: {
-#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
-    MDNode *Node = MDNode::get(Context, Builder.getInt32(1));
+    MDNode *Node = MDNode::get(Context,
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+            ConstantAsMetadata::get
+#endif
+            (Builder.getInt32(1)));
 
     // Convert the type of the pointer to a pointer to the stored type.
     unsigned AS = Ops[0]->getType()->getPointerAddressSpace();
@@ -949,7 +952,6 @@ bool TreeToLLVM::TargetIntrinsicLower(GimpleTy *stmt, tree fndecl,
 
     StoreInst *SI = Builder.CreateAlignedStore(Ops[1], Ptr, 16);
     SI->setMetadata(TheModule->getMDKindID("nontemporal"), Node);
-#endif
     return true;
   }
   case rsqrtf: {

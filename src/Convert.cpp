@@ -9303,10 +9303,13 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
       if (gimple_has_location(stmt)) {
         // Pass the location of the asm using a !srcloc metadata.
         Constant *LocationCookie = Builder.getInt64(gimple_location(stmt));
-        // FIXME
-#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
-        CV->setMetadata("srcloc", MDNode::get(Context, LocationCookie));
+        CV->setMetadata("srcloc", MDNode::get(Context,
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+                    ConstantAsMetadata::get(LocationCookie)
+#else
+                    LocationCookie
 #endif
+                    ));
       }
 
       // If the call produces a value, store it into the destination.

@@ -1438,7 +1438,6 @@ MigDISubprogram DebugInfo::CreateSubprogramDefinition(
 // Routines for inserting code into a function
 //===----------------------------------------------------------------------===//
 
-#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
 /// InsertDeclare - Insert a new llvm.dbg.declare intrinsic call.
 Instruction *DebugInfo::InsertDeclare(Value *Storage, DIVariable D,
                                       Instruction *InsertBefore) {
@@ -1447,7 +1446,14 @@ Instruction *DebugInfo::InsertDeclare(Value *Storage, DIVariable D,
   if (!DeclareFn)
     DeclareFn = Intrinsic::getDeclaration(&M, Intrinsic::dbg_declare);
 
-  Value *Args[] = { MDNode::get(Storage->getContext(), Storage), D };
+  Value *Args[] = {
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+    MetadataAsValue::get(Storage->getContext(), ValueAsMetadata::get(Storage)),
+    MetadataAsValue::get(Storage->getContext(), &D)
+#else
+    MDNode::get(Storage->getContext(), Storage), D
+#endif
+  };
   return CallInst::Create(DeclareFn, Args, "", InsertBefore);
 }
 
@@ -1459,7 +1465,14 @@ Instruction *DebugInfo::InsertDeclare(Value *Storage, DIVariable D,
   if (!DeclareFn)
     DeclareFn = Intrinsic::getDeclaration(&M, Intrinsic::dbg_declare);
 
-  Value *Args[] = { MDNode::get(Storage->getContext(), Storage), D };
+  Value *Args[] = {
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+     MetadataAsValue::get(Storage->getContext(), ValueAsMetadata::get(Storage)),
+     MetadataAsValue::get(Storage->getContext(), &D)
+#else
+     MDNode::get(Storage->getContext(), Storage), D
+#endif
+  };
 
   // If this block already has a terminator then insert this intrinsic
   // before the terminator.
@@ -1477,9 +1490,19 @@ Instruction *DebugInfo::InsertDbgValueIntrinsic(
   if (!ValueFn)
     ValueFn = Intrinsic::getDeclaration(&M, Intrinsic::dbg_value);
 
-  Value *Args[] = { MDNode::get(V->getContext(), V),
-                    ConstantInt::get(Type::getInt64Ty(V->getContext()), Offset),
-                    D };
+  Value *Args[] = {
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      MetadataAsValue::get(V->getContext(), ValueAsMetadata::get(V)),
+#else
+      MDNode::get(V->getContext(), V),
+#endif
+      ConstantInt::get(Type::getInt64Ty(V->getContext()), Offset),
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      MetadataAsValue::get(V->getContext(), &D)
+#else
+      D
+#endif
+  };
   return CallInst::Create(ValueFn, Args, "", InsertBefore);
 }
 
@@ -1491,9 +1514,18 @@ Instruction *DebugInfo::InsertDbgValueIntrinsic(
   if (!ValueFn)
     ValueFn = Intrinsic::getDeclaration(&M, Intrinsic::dbg_value);
 
-  Value *Args[] = { MDNode::get(V->getContext(), V),
-                    ConstantInt::get(Type::getInt64Ty(V->getContext()), Offset),
-                    D };
+  Value *Args[] = {
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      MetadataAsValue::get(V->getContext(), ValueAsMetadata::get(V)),
+#else
+      MDNode::get(V->getContext(), V),
+#endif
+      ConstantInt::get(Type::getInt64Ty(V->getContext()), Offset),
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      MetadataAsValue::get(V->getContext(), &D)
+#else
+      D
+#endif
+  };
   return CallInst::Create(ValueFn, Args, "", InsertAtEnd);
 }
-#endif

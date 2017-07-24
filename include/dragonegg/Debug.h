@@ -215,7 +215,6 @@ private:
 #endif
                              unsigned LineNo, llvm::Function *Fn);
 
-#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
   /// InsertDeclare - Insert a new llvm.dbg.declare intrinsic call.
   llvm::Instruction *
   InsertDeclare(llvm::Value *Storage, llvm::DIVariable D,
@@ -235,7 +234,6 @@ private:
   llvm::Instruction *InsertDbgValueIntrinsic(llvm::Value *V, uint64_t Offset,
                                              llvm::DIVariable D,
                                              llvm::Instruction *InsertBefore);
-#endif
 };
 
 #endif /* DRAGONEGG_DEBUG_H */
