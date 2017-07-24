@@ -624,7 +624,9 @@ static void CreateTargetMachine(const std::string &TargetTriple) {
   // TODO: TrapFuncName.
   // TODO: -fsplit-stack
   // https://reviews.llvm.org/D19733
-#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+  TheModule->setPIELevel(PIELevel::Large);
+#else
   Options.PositionIndependentExecutable = flag_pie;
 #endif
 
