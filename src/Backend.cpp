@@ -559,11 +559,11 @@ static void CreateTargetMachine(const std::string &TargetTriple) {
 
   // The target can set LLVM_SET_RELOC_MODEL to configure the relocation model
   // used by the LLVM backend.
-  Reloc::Model RelocModel =
+  Reloc::Model RelocModel
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-      Reloc::Static;
+      ;
 #else
-      Reloc::Default;
+      = Reloc::Default;
 #endif
 #ifdef LLVM_SET_RELOC_MODEL
   LLVM_SET_RELOC_MODEL(RelocModel);
