@@ -5554,14 +5554,14 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
                                                     Intrinsic::ID Id) {
       Value *Amt = EmitMemory(gimple_call_arg(MIG_TO_GCALL(stmt), 0));
       Value *Result =
-#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
-        Builder.CreateCall2(
-          Intrinsic::getDeclaration(TheModule, Id, Amt->getType()), Amt,
-          Builder.getTrue());
-#else
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
         Builder.CreateCall(
           Intrinsic::getDeclaration(TheModule, Id, Amt->getType()),
           {Amt, Builder.getTrue()});
+#else
+        Builder.CreateCall2(
+          Intrinsic::getDeclaration(TheModule, Id, Amt->getType()), Amt,
+          Builder.getTrue());
 #endif
       tree return_type = gimple_call_return_type(MIG_TO_GCALL(stmt));
       Type *DestTy = ConvertType(return_type);

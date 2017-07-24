@@ -1565,9 +1565,7 @@ Value *make_decl_llvm(tree decl) {
       FnEntry =
           Function::Create(Ty, Function::ExternalLinkage, Name, TheModule);
       FnEntry->setCallingConv(CC);
-#if LLVM_VERSION_CODE < LLVM_VERSION(4, 0)
       FnEntry->setAttributes(PAL);
-#endif
 
       // Check for external weak linkage.
       if (DECL_EXTERNAL(decl) && DECL_WEAK(decl))
