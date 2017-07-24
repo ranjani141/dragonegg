@@ -1003,7 +1003,7 @@ void TreeToLLVM::StartFunctionBody() {
   tree static_chain = cfun->static_chain_decl;
   FunctionType *FTy;
   CallingConv::ID CallingConv;
-  AttributeSet PAL;
+  MigAttributeSet PAL;
   LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
       TheModule->getContext();
@@ -3583,21 +3583,21 @@ struct FunctionCallArgumentConversion : public DefaultABIClient {
 /// in the GIMPLE_CALL 'stmt'. If the result of the call is a scalar, return the
 /// result, otherwise store it in DestLoc.
 Value *TreeToLLVM::EmitCallOf(Value *Callee, GimpleTy *stmt,
-                              const MemRef *DestLoc, const AttributeSet &InPAL) {
+                              const MemRef *DestLoc, const MigAttributeSet &InPAL) {
   BasicBlock *LandingPad = 0; // Non-zero indicates an invoke.
   int LPadNo = 0;
 
-  AttributeSet PAL = InPAL;
+  MigAttributeSet PAL = InPAL;
   if (PAL.isEmpty() && isa<Function>(Callee))
     PAL = cast<Function>(Callee)->getAttributes();
 
   // Work out whether to use an invoke or an ordinary call.
   if (!stmt_could_throw_p(stmt))
     // This call does not throw - mark it 'nounwind'.
-    PAL = PAL.addAttribute(Callee->getContext(), AttributeSet::FunctionIndex,
+    PAL = PAL.addAttribute(Callee->getContext(), MigAttributeSet::FunctionIndex,
                            Attribute::NoUnwind);
 
-  if (!PAL.hasAttribute(AttributeSet::FunctionIndex, Attribute::NoUnwind)) {
+  if (!PAL.hasAttribute(MigAttributeSet::FunctionIndex, Attribute::NoUnwind)) {
     // This call may throw.  Determine if we need to generate
     // an invoke rather than a simple call.
     LPadNo = lookup_stmt_eh_lp(stmt);
@@ -3705,7 +3705,7 @@ Value *TreeToLLVM::EmitCallOf(Value *Callee, GimpleTy *stmt,
       // attributes to all scalars of the aggregate.
       for (unsigned j = OldSize + 1; j <= CallOperands.size(); ++j)
         PAL = PAL.addAttributes(Context, j,
-                                AttributeSet::get(Context, j, AttrBuilder));
+                                MigAttributeSet::get(Context, j, AttrBuilder));
     }
 
     Client.clear();
@@ -4655,7 +4655,7 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
     }
 
     Result =
-        EmitCallOf(TargetBuiltinCache[FnCode], stmt, DestLoc, AttributeSet());
+        EmitCallOf(TargetBuiltinCache[FnCode], stmt, DestLoc, MigAttributeSet());
     return true;
   }
 
@@ -10016,7 +10016,7 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
 #endif
       Value *Callee = EmitRegister(call_expr);
       CallingConv::ID CallingConv;
-      AttributeSet PAL;
+      MigAttributeSet PAL;
 
       Type *Ty;
       // If this is a K&R-style function: with a type that takes no arguments but

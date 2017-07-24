@@ -1556,7 +1556,7 @@ Value *make_decl_llvm(tree decl) {
     Function *FnEntry = TheModule->getFunction(Name);
     if (FnEntry == 0) {
       CallingConv::ID CC;
-      AttributeSet PAL;
+      MigAttributeSet PAL;
       FunctionType *Ty =
           ConvertFunctionType(TREE_TYPE(decl), decl, NULL, CC, PAL);
       FnEntry =

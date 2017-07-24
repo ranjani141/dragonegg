@@ -695,7 +695,7 @@ static void HandleArgumentExtension(tree ArgTy, AttrBuilder &AttrBuilder) {
 /// specified result type for the function.
 FunctionType *ConvertArgListToFnType(
     tree type, ArrayRef<tree> Args, tree static_chain, bool KNRPromotion,
-    CallingConv::ID &CallingConv, AttributeSet &PAL) {
+    CallingConv::ID &CallingConv, MigAttributeSet &PAL) {
   tree ReturnType = TREE_TYPE(type);
   SmallVector<Type *, 8> ArgTys;
   LLVMContext &Context =
@@ -716,7 +716,7 @@ FunctionType *ConvertArgListToFnType(
   // Builtins are always prototyped, so this isn't one.
   ABIConverter.HandleReturnType(ReturnType, current_function_decl, false);
 
-  SmallVector<AttributeSet, 8> Attrs;
+  SmallVector<MigAttributeSet, 8> Attrs;
 
   // Compute whether the result needs to be zext or sext'd.
   AttrBuilder RAttrBuilder;
@@ -729,14 +729,14 @@ FunctionType *ConvertArgListToFnType(
 
   if (RAttrBuilder.hasAttributes())
     Attrs.push_back(
-        AttributeSet::get(Context, AttributeSet::ReturnIndex, RAttrBuilder));
+        MigAttributeSet::get(Context, MigAttributeSet::ReturnIndex, RAttrBuilder));
 
   // If this function returns via a shadow argument, the dest loc is passed
   // in as a pointer.  Mark that pointer as struct-ret and noalias.
   if (ABIConverter.isShadowReturn()) {
     AttrBuilder B;
     B.addAttribute(Attribute::StructRet).addAttribute(Attribute::NoAlias);
-    Attrs.push_back(AttributeSet::get(Context, ArgTys.size(), B));
+    Attrs.push_back(MigAttributeSet::get(Context, ArgTys.size(), B));
   }
 
   std::vector<Type *> ScalarArgs;
@@ -744,7 +744,7 @@ FunctionType *ConvertArgListToFnType(
     // Pass the static chain as the first parameter.
     ABIConverter.HandleArgument(TREE_TYPE(static_chain), ScalarArgs);
     // Mark it as the chain argument.
-    Attrs.push_back(AttributeSet::get(Context, ArgTys.size(), Attribute::Nest));
+    Attrs.push_back(MigAttributeSet::get(Context, ArgTys.size(), Attribute::Nest));
   }
 
   for (ArrayRef<tree>::iterator I = Args.begin(), E = Args.end(); I != E; ++I) {
@@ -763,16 +763,16 @@ FunctionType *ConvertArgListToFnType(
       PAttrBuilder.addAttribute(Attribute::NoAlias);
 
     if (PAttrBuilder.hasAttributes())
-      Attrs.push_back(AttributeSet::get(Context, ArgTys.size(), PAttrBuilder));
+      Attrs.push_back(MigAttributeSet::get(Context, ArgTys.size(), PAttrBuilder));
   }
 
-  PAL = AttributeSet::get(Context, Attrs);
+  PAL = MigAttributeSet::get(Context, Attrs);
   return FunctionType::get(RetTy, ArgTys, false);
 }
 
 FunctionType *
 ConvertFunctionType(tree type, tree decl, tree static_chain,
-                    CallingConv::ID &CallingConv, AttributeSet &PAL) {
+                    CallingConv::ID &CallingConv, MigAttributeSet &PAL) {
   LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
       TheModule->getContext();
@@ -794,7 +794,7 @@ ConvertFunctionType(tree type, tree decl, tree static_chain,
                                 decl ? DECL_BUILT_IN(decl) : false);
 
   // Compute attributes for return type (and function attributes).
-  SmallVector<AttributeSet, 8> Attrs;
+  SmallVector<MigAttributeSet, 8> Attrs;
   AttrBuilder FnAttrBuilder;
 
   int flags = flags_from_decl_or_type(decl ? decl : type);
@@ -848,14 +848,14 @@ ConvertFunctionType(tree type, tree decl, tree static_chain,
 
   if (RAttrBuilder.hasAttributes())
     Attrs.push_back(
-        AttributeSet::get(Context, AttributeSet::ReturnIndex, RAttrBuilder));
+        MigAttributeSet::get(Context, MigAttributeSet::ReturnIndex, RAttrBuilder));
 
   // If this function returns via a shadow argument, the dest loc is passed
   // in as a pointer.  Mark that pointer as struct-ret and noalias.
   if (ABIConverter.isShadowReturn()) {
     AttrBuilder B;
     B.addAttribute(Attribute::StructRet).addAttribute(Attribute::NoAlias);
-    Attrs.push_back(AttributeSet::get(Context, ArgTypes.size(), B));
+    Attrs.push_back(MigAttributeSet::get(Context, ArgTypes.size(), B));
   }
 
   std::vector<Type *> ScalarArgs;
@@ -864,7 +864,7 @@ ConvertFunctionType(tree type, tree decl, tree static_chain,
     ABIConverter.HandleArgument(TREE_TYPE(static_chain), ScalarArgs);
     // Mark it as the chain argument.
     Attrs.push_back(
-        AttributeSet::get(Context, ArgTypes.size(), Attribute::Nest));
+        MigAttributeSet::get(Context, ArgTypes.size(), Attribute::Nest));
   }
 
 #ifdef LLVM_TARGET_ENABLE_REGPARM
@@ -931,7 +931,7 @@ ConvertFunctionType(tree type, tree decl, tree static_chain,
       // If the argument is split into multiple scalars, assign the
       // attributes to all scalars of the aggregate.
       for (unsigned i = OldSize + 1; i <= ArgTypes.size(); ++i)
-        Attrs.push_back(AttributeSet::get(Context, i, PAttrBuilder));
+        Attrs.push_back(MigAttributeSet::get(Context, i, PAttrBuilder));
     }
 
     if (DeclArgs)
@@ -951,10 +951,10 @@ ConvertFunctionType(tree type, tree decl, tree static_chain,
 
   if (FnAttrBuilder.hasAttributes())
     Attrs.push_back(
-        AttributeSet::get(Context, AttributeSet::FunctionIndex, FnAttrBuilder));
+        MigAttributeSet::get(Context, MigAttributeSet::FunctionIndex, FnAttrBuilder));
 
   // Finally, make the function type and result attributes.
-  PAL = AttributeSet::get(Context, Attrs);
+  PAL = MigAttributeSet::get(Context, Attrs);
   return FunctionType::get(RetTy, ArgTypes, Args == 0);
 }
 
@@ -1431,7 +1431,7 @@ static Type *ConvertTypeRecursive(tree type) {
   case FUNCTION_TYPE:
   case METHOD_TYPE: {
     CallingConv::ID CallingConv;
-    AttributeSet PAL;
+    MigAttributeSet PAL;
     // No declaration to pass through, passing NULL.
     return RememberTypeConversion(
         type, ConvertFunctionType(type, NULL, NULL, CallingConv, PAL));
