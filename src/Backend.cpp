@@ -155,12 +155,7 @@ PassManagerBuilder PassBuilder;
 TargetMachine *TheTarget = 0;
 TargetFolder *TheFolder = 0;
 raw_ostream *OutStream = 0; // Stream to write assembly code to.
-#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-std::shared_ptr<formatted_raw_ostream>
-#else
-formatted_raw_ostream
-#endif
-      FormattedOutStream;
+formatted_raw_ostream FormattedOutStream;
 
 static bool DebugPassArguments;
 static bool DebugPassStructure;
@@ -813,9 +808,7 @@ static void InitializeOutputStreams(bool Binary) {
     report_fatal_error(EC.message());
 
   // https://reviews.llvm.org/rL234535
-#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-  FormattedOutStream = std::make_shared<formatted_raw_ostream>(*OutStream);
-#else
+#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
   FormattedOutStream.setStream(*OutStream,
                                formatted_raw_ostream::PRESERVE_STREAM);
 #endif
@@ -874,12 +867,17 @@ static void createPerFunctionOptimizationPasses() {
     TargetMachine::CodeGenFileType CGFT = TargetMachine::CGFT_AssemblyFile;
     if (EmitObj)
       CGFT = TargetMachine::CGFT_ObjectFile;
-#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
-    if (TheTarget->addPassesToEmitFile(*PM, FormattedOutStream, CGFT,
-                                       DisableVerify))
+    std::error_code EC;
+    raw_fd_ostream Out(llvm_asm_file_name, EC,
+                       EmitObj ? sys::fs::F_None : sys::fs::F_Text);
+    if (TheTarget->addPassesToEmitFile(*PM,
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+                                       Out,
 #else
-    if (0)
+                                       FormattedOutStream,
 #endif
+                                       CGFT,
+                                       DisableVerify))
       llvm_unreachable("Error interfacing to target machine!");
   }
 
@@ -895,7 +893,6 @@ static void createPerModuleOptimizationPasses() {
 #else
   PerModulePasses = new PassManager();
 #endif
-  // https://reviews.llvm.org/D7992
 #if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
   PerModulePasses->add(new DataLayoutPass());
 #endif
@@ -951,7 +948,6 @@ static void createPerModuleOptimizationPasses() {
       legacy::PassManager *PM = CodeGenPasses = new legacy::PassManager();
 #else
       PassManager *PM = CodeGenPasses = new PassManager();
-      // FIXME: https://reviews.llvm.org/D7992
       PM->add(new DataLayoutPass());
 #endif
 #if LLVM_VERSION_CODE >= LLVM_VERSION(3, 3) && LLVM_VERSION_CODE <= LLVM_VERSION(3, 6)
@@ -972,11 +968,18 @@ static void createPerModuleOptimizationPasses() {
       TargetMachine::CodeGenFileType CGFT = TargetMachine::CGFT_AssemblyFile;
       if (EmitObj)
         CGFT = TargetMachine::CGFT_ObjectFile;
-#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
-      if (TheTarget->addPassesToEmitFile(*PM, FormattedOutStream, CGFT,
+      std::error_code EC;
+      raw_fd_ostream Out(llvm_asm_file_name, EC,
+                         EmitObj ? sys::fs::F_None : sys::fs::F_Text);
+      if (TheTarget->addPassesToEmitFile(*PM,
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+                                         Out,
+#else
+                                         FormattedOutStream,
+#endif
+                                         CGFT,
                                          DisableVerify))
         llvm_unreachable("Error interfacing to target machine!");
-#endif
     }
   }
 }
@@ -2257,11 +2260,7 @@ static void llvm_finish_unit(void */*gcc_data*/, void */*user_data*/) {
     Context.setInlineAsmDiagnosticHandler(OldHandler, OldHandlerData);
   }
 
-#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-  FormattedOutStream->flush();
-#else
   FormattedOutStream.flush();
-#endif
   OutStream->flush();
   //TODO  timevar_pop(TV_LLVM_PERFILE);
 
