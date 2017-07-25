@@ -910,6 +910,7 @@ bool TreeToLLVM::TargetIntrinsicLower(GimpleTy *stmt, tree fndecl,
         Ops[1] = ConstantInt::get(IntTy, (shiftVal - 16) * 8);
 
         // create i32 constant
+        // https://reviews.llvm.org/rL229069
 #if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
         Function *F =
             Intrinsic::getDeclaration(TheModule, Intrinsic::x86_sse2_psrl_dq);

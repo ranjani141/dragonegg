@@ -1763,7 +1763,7 @@ static Constant *AddressOfLABEL_DECL(tree exp, TargetFolder &) {
   return TheTreeToLLVM->AddressOfLABEL_DECL(exp);
 }
 
-#if (GCC_MINOR > 5)
+#if GCC_VERSION_CODE > GCC_VERSION(4, 5)
 /// AddressOfMEM_REF - Return the address of a memory reference.
 static Constant *AddressOfMEM_REF(tree exp, TargetFolder &Folder) {
   // The address is the first operand offset in bytes by the second.
@@ -1772,11 +1772,21 @@ static Constant *AddressOfMEM_REF(tree exp, TargetFolder &Folder) {
     return Addr;
 
   // Convert to a byte pointer and displace by the offset.
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      TheModule->getContext();
+#else
+      TheContext;
+#endif
   Addr = Folder.CreateBitCast(Addr, GetUnitPointerType(Context));
   APInt Delta = getAPIntValue(TREE_OPERAND(exp, 1));
   Constant *Offset = ConstantInt::get(Context, Delta);
   // The address is always inside the referenced object, so "inbounds".
-  return Folder.CreateInBoundsGetElementPtr(Addr, Offset);
+  return Folder.CreateInBoundsGetElementPtr(
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+          nullptr,
+#endif
+          Addr, Offset);
 }
 #endif
 
@@ -1823,7 +1833,7 @@ static Constant *AddressOfImpl(tree exp, TargetFolder &Folder) {
   case LABEL_DECL:
     Addr = AddressOfLABEL_DECL(exp, Folder);
     break;
-#if (GCC_MINOR > 5)
+#if GCC_VERSION_CODE > GCC_VERSION(4, 5)
   case MEM_REF:
     Addr = AddressOfMEM_REF(exp, Folder);
     break;

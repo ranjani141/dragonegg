@@ -1410,7 +1410,7 @@ static void emit_global(tree decl) {
   assert(SizeOfGlobalMatchesDecl(GV, decl) && "Global has wrong size!");
 
   // Mark the global as written so gcc doesn't waste time outputting it.
-#if (GCC_MINOR < 8)
+#if GCC_VERSION_CODE < GCC_VERSION(4, 8)
   TREE_ASM_WRITTEN(decl) = 1;
 #endif
 
@@ -2084,8 +2084,12 @@ static void llvm_emit_globals(void * /*gcc_data*/, void * /*user_data*/) {
     tree decl = varpool_symbol(vnode)->decl;
     if (vnode->analyzed &&
         (
-#if (GCC_MINOR > 5)
+#if GCC_VERSION_CODE > GCC_VERSION(4, 5)
+#if (GCC_MAJOR > 4)
+            !vnode->can_remove_if_no_refs_p()
+#else
             !varpool_can_remove_if_no_refs(vnode)
+#endif
 #else
             vnode->force_output ||
             (!DECL_COMDAT(decl) &&
@@ -2102,7 +2106,7 @@ static void llvm_emit_globals(void * /*gcc_data*/, void * /*user_data*/) {
         emit_global(decl);
   }
 
-#if (GCC_MINOR > 6)
+#if GCC_VERSION_CODE > GCC_VERSION(4, 6)
   // Aliases of functions and global variables with bodies are output when the
   // body is.  Output any aliases (weak references) of globals without bodies,
   // i.e. external declarations, now.

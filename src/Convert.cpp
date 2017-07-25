@@ -433,7 +433,7 @@ static bool isDirectMemoryAccessSafe(Type *RegTy, tree type) {
     assert(RegTy->isIntegerTy() && "Expected an integer type!");
     return true;
 
-#if (GCC_MINOR > 5)
+#if GCC_VERSION_CODE > GCC_VERSION(4, 5)
   case NULLPTR_TYPE:
 #endif
   case POINTER_TYPE:
@@ -1906,7 +1906,7 @@ LValue TreeToLLVM::EmitLV(tree exp) {
   case SSA_NAME:
     LV = EmitLV_SSA_NAME(exp);
     break;
-#if (GCC_MINOR > 5)
+#if GCC_VERSION_CODE > GCC_VERSION(4, 5)
   case MEM_REF:
     LV = EmitLV_MEM_REF(exp);
     break;
@@ -4687,11 +4687,11 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
     return EmitBuiltinAdjustTrampoline(stmt, Result);
   case BUILT_IN_ALLOCA:
     return EmitBuiltinAlloca(stmt, Result);
-#if (GCC_MINOR > 6)
+#if GCC_VERSION_CODE > GCC_VERSION(4, 6)
   case BUILT_IN_ALLOCA_WITH_ALIGN:
     return EmitBuiltinAllocaWithAlign(stmt, Result);
 #endif
-#if (GCC_MINOR > 6)
+#if GCC_VERSION_CODE > GCC_VERSION(4, 6)
   case BUILT_IN_ASSUME_ALIGNED:
     return EmitBuiltinAssumeAligned(stmt, Result);
 #endif
@@ -4957,7 +4957,7 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
         Cond, Constant::getNullValue(Result->getType()), Result);
     return true;
   }
-#if (GCC_MINOR > 6)
+#if GCC_VERSION_CODE > GCC_VERSION(4, 6)
   case BUILT_IN_ICEIL:
   case BUILT_IN_ICEILF:
   case BUILT_IN_ICEILL:
@@ -4970,7 +4970,7 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
   case BUILT_IN_LLCEILL:
     Result = EmitBuiltinLCEIL(stmt);
     return true;
-#if (GCC_MINOR > 6)
+#if GCC_VERSION_CODE > GCC_VERSION(4, 6)
   case BUILT_IN_IFLOOR:
   case BUILT_IN_IFLOORF:
   case BUILT_IN_IFLOORL:
@@ -4983,7 +4983,7 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
   case BUILT_IN_LLFLOORL:
     Result = EmitBuiltinLFLOOR(stmt);
     return true;
-#if (GCC_MINOR > 6)
+#if GCC_VERSION_CODE > GCC_VERSION(4, 6)
   case BUILT_IN_IROUND:
   case BUILT_IN_IROUNDF:
   case BUILT_IN_IROUNDL:
@@ -8626,7 +8626,7 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
       return Builder.CreateShuffleVector(LHS, RHS, ConstantVector::get(Mask));
     }
 
-#if (GCC_MAJOR < 5 && GCC_MINOR > 6)
+#if GCC_VERSION_CODE > GCC_VERSION(4, 6)
     Value *TreeToLLVM::EmitReg_VEC_PERM_EXPR(tree op0, tree op1, tree op2) {
       unsigned Length = (unsigned) TYPE_VECTOR_SUBPARTS(TREE_TYPE(op0));
 
@@ -8664,12 +8664,20 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
       AllocaInst *Tmp = CreateTemporary(TmpTy, Align);
       // Store the first vector to the first element of the pair.
       Value *Tmp0 =
-          Builder.CreateStructGEP(Tmp, 0, flag_verbose_asm ? "vp1s" : "");
+          Builder.CreateStructGEP(
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+                                  TmpTy,
+#endif
+                                  Tmp, 0, flag_verbose_asm ? "vp1s" : "");
       StoreRegisterToMemory(V0, MemRef(Tmp0, Align, /*Volatile*/ false),
                             TREE_TYPE(op0), 0, Builder);
       // Store the second vector to the second element of the pair.
       Value *Tmp1 =
-          Builder.CreateStructGEP(Tmp, 1, flag_verbose_asm ? "vp2s" : "");
+          Builder.CreateStructGEP(
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+                                  TmpTy,
+#endif
+                                  Tmp, 1, flag_verbose_asm ? "vp2s" : "");
       StoreRegisterToMemory(V1, MemRef(Tmp1, Align, /*Volatile*/ false),
                             TREE_TYPE(op1), 0, Builder);
 
@@ -8692,7 +8700,7 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
     }
 #endif
 
-#if (GCC_MAJOR < 5 && GCC_MINOR > 5)
+#if GCC_VERSION_CODE > GCC_VERSION(4, 5)
     Value *TreeToLLVM::EmitReg_FMA_EXPR(tree op0, tree op1, tree op2) {
       Value *V0 = EmitRegister(op0);
       Value *V1 = EmitRegister(op1);
@@ -8700,7 +8708,11 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
 
       Value *FMAIntr = Intrinsic::getDeclaration(TheModule, Intrinsic::fma,
                                                  V0->getType());
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      return Builder.CreateCall(FMAIntr, {V0, V1, V2});
+#else
       return Builder.CreateCall3(FMAIntr, V0, V1, V2);
+#endif
     }
 #endif
 
@@ -9485,7 +9497,7 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
     void TreeToLLVM::RenderGIMPLE_ASSIGN(GimpleTy *stmt) {
       tree lhs = gimple_assign_lhs(stmt);
 
-#if (GCC_MAJOR < 5 && GCC_MINOR > 6)
+#if GCC_VERSION_CODE > GCC_VERSION(4, 6)
       // Assigning a right-hand side with TREE_CLOBBER_P says that the left-hand
       // side is dead from this point on.  Output an llvm.lifetime.end intrinsic.
       if (get_gimple_rhs_class(gimple_expr_code(stmt)) == GIMPLE_SINGLE_RHS &&
@@ -9503,7 +9515,11 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
                                             : ~0UL;
           Function *EndIntr =
               Intrinsic::getDeclaration(TheModule, Intrinsic::lifetime_end);
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+          Builder.CreateCall(EndIntr, {Builder.getInt64(LHSSize), LHSAddr});
+#else
           Builder.CreateCall2(EndIntr, Builder.getInt64(LHSSize), LHSAddr);
+#endif
         }
         return;
       }
@@ -9859,7 +9875,7 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
       tree_code code = gimple_assign_rhs_code(stmt);
       tree rhs1 = gimple_assign_rhs1(stmt);
       tree rhs2 = gimple_assign_rhs2(stmt);
-#if (GCC_MAJOR < 5 && GCC_MINOR > 5)
+#if GCC_VERSION_CODE > GCC_VERSION(4, 5)
       tree rhs3 = gimple_assign_rhs3(stmt);
 #endif
 
@@ -10055,12 +10071,12 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
         break;
 
 // Ternary expressions.
-#if (GCC_MAJOR < 5 && GCC_MINOR > 5)
+#if GCC_VERSION_CODE > GCC_VERSION(4, 5)
       case FMA_EXPR:
         RHS = EmitReg_FMA_EXPR(rhs1, rhs2, rhs3);
         break;
 #endif
-#if (GCC_MAJOR < 5 && GCC_MINOR > 6)
+#if GCC_VERSION_CODE > GCC_VERSION(4, 6)
       case COND_EXPR:
       case VEC_COND_EXPR:
         RHS = EmitReg_CondExpr(rhs1, rhs2, rhs3);

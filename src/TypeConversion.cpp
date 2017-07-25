@@ -167,7 +167,7 @@ public:
     case ENUMERAL_TYPE:
     case FIXED_POINT_TYPE:
     case INTEGER_TYPE:
-#if (GCC_MINOR > 5)
+#if GCC_VERSION_CODE > GCC_VERSION(4, 5)
     case NULLPTR_TYPE:
 #endif
     case OFFSET_TYPE:
@@ -222,9 +222,11 @@ public:
 uint64_t ArrayLengthOf(tree type) {
   assert(isa<ARRAY_TYPE>(type) && "Only for array types!");
   // Workaround for missing sanity checks in older versions of GCC.
+#if (GCC_MAJOR < 5)
   if ((GCC_MINOR == 5 && GCC_MICRO < 3) || (GCC_MINOR == 6 && GCC_MICRO < 2))
     if (!TYPE_DOMAIN(type) || !TYPE_MAX_VALUE(TYPE_DOMAIN(type)))
       return NO_LENGTH;
+#endif
   tree range = array_type_nelts(type); // The number of elements minus one.
   // Bail out if the array has variable or unknown length.
   if (!isInt64(range, false))
@@ -476,7 +478,7 @@ Type *getRegType(tree type) {
     return StructType::get(EltTy, EltTy, NULL);
   }
 
-#if (GCC_MINOR > 5)
+#if GCC_VERSION_CODE > GCC_VERSION(4, 5)
   case NULLPTR_TYPE:
     return GetUnitPointerType(Context, TYPE_ADDR_SPACE(type));
 #endif
@@ -1339,7 +1341,7 @@ static bool mayRecurse(tree type) {
   case ENUMERAL_TYPE:
   case FIXED_POINT_TYPE:
   case INTEGER_TYPE:
-#if (GCC_MINOR > 5)
+#if GCC_VERSION_CODE > GCC_VERSION(4, 5)
   case NULLPTR_TYPE:
 #endif
   case OFFSET_TYPE:
@@ -1510,7 +1512,7 @@ static Type *ConvertTypeNonRecursive(tree type) {
     break;
   }
 
-#if (GCC_MINOR > 5)
+#if GCC_VERSION_CODE > GCC_VERSION(4, 5)
   case NULLPTR_TYPE:
     Ty = GetUnitPointerType(Context, TYPE_ADDR_SPACE(type));
     break;
