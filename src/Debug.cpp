@@ -584,6 +584,7 @@ MigDIType DebugInfo::createMethodType(tree type) {
     findRegion(TYPE_CONTEXT(type)), getOrCreateFile(main_input_filename),
     0, 0, 0, 0);
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+  LLVMContext &Context = FwdType->getContext();
   llvm::Value *FTN = cast<Value>(FwdType);
   llvm::TrackingVH<Value>
 #else
@@ -650,7 +651,9 @@ MigDIType DebugInfo::createMethodType(tree type) {
 
   // Now that we have a real decl for the struct, replace anything using the
   // old decl with the new one.  This will recursively update the debug info.
-#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+  FwdTypeNode->replaceAllUsesWith(MetadataAsValue::get(Context, RealType->getRawScope()));
+#else
   llvm::DIType(FwdTypeNode).replaceAllUsesWith(RealType);
 #endif
 
@@ -786,9 +789,9 @@ MigDIType DebugInfo::createEnumType(tree type) {
       GetNodeName(type), getOrCreateFile(Loc.file), Loc.line,
       NodeSizeInBits(type), NodeAlignInBits(type), 0, 0,
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-      nullptr,
+      0,
 #else
-      llvm::DIType(),
+      llvm::DIType(), /* RunTimeLang? */
 #endif
       EltArray);
 }
@@ -1046,7 +1049,10 @@ MigDIType DebugInfo::createStructType(tree type) {
 
   // Now that we have a real decl for the struct, replace anything using the
   // old decl with the new one.  This will recursively update the debug info
-#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+  LLVMContext &Context = RealDecl->getContext();
+  FwdDeclNode->replaceAllUsesWith(MetadataAsValue::get(Context, RealDecl->getRawScope()));
+#else
   llvm::DIType(FwdDeclNode).replaceAllUsesWith(RealDecl);
 #endif
 
