@@ -911,6 +911,7 @@ bool TreeToLLVM::TargetIntrinsicLower(GimpleTy *stmt, tree fndecl,
 
         // create i32 constant
         // https://reviews.llvm.org/rL229069
+        // just ignore x86_sse2_psrl_dq.
 #if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
         Function *F =
             Intrinsic::getDeclaration(TheModule, Intrinsic::x86_sse2_psrl_dq);
