@@ -59,6 +59,13 @@ extern "C" {
 #include "flags.h"
 #if GCC_VERSION_CODE > GCC_VERSION(4, 6)
 #include "gimple-pretty-print.h"
+#include "varasm.h"
+#include "rtl.h"
+#include "expr.h"
+#include "explow.h"
+#define MAX_RECOG_OPERANDS 101
+#define MAX_DUP_OPERANDS 10
+#include "recog.h"
 #endif
 #include "langhooks.h"
 #include "output.h"
@@ -89,7 +96,6 @@ extern "C" {
 #if (GCC_MAJOR > 4)
 #define ENTRY_BLOCK_PTR         (cfun->cfg->x_entry_block_ptr)
 #define FOR_EACH_BB(BB) FOR_EACH_BB_FN (BB, cfun)
-#define MAX_RECOG_OPERANDS 101
 #define MIG_TO_GCALL(STMT) as_a<gcall *>(STMT)
 #define MIG_TO_GASM(STMT) as_a<gasm *>(STMT)
 #define MIG_TO_GSWITCH(STMT) as_a<gswitch *>(STMT)
@@ -8818,12 +8824,23 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
           (NumOutputs + NumInputs) * sizeof(const char *));
 
 #if (GCC_MAJOR > 4)
+      auto_vec<tree, MAX_RECOG_OPERANDS> OutputTvec;
+      auto_vec<tree, MAX_RECOG_OPERANDS> InputTvec;
       auto_vec<const char *, MAX_RECOG_OPERANDS> GConstraints;
       auto_vec<rtx, MAX_RECOG_OPERANDS> OutputRvec;
       auto_vec<rtx, MAX_RECOG_OPERANDS> InputRvec;
+      rtx_insn *AfterRtlSeq = NULL;
+      rtx_insn *AfterRtlEnd = NULL;
+      auto_vec<rtx> ClobberRvec;
+      HARD_REG_SET ClobberedRegs;
+
+      // Copy the gimple vectors into new vectors that we can manipulate.
+      OutputTvec.safe_grow(NumOutputs);
+      InputTvec.safe_grow(NumInputs);
       GConstraints.safe_grow(NumOutputs + NumInputs);
       OutputRvec.safe_grow(NumOutputs);
       InputRvec.safe_grow(NumInputs);
+      CLEAR_HARD_REG_SET(ClobberedRegs);
 #endif
 
       // Initialize the Constraints array.
@@ -8836,6 +8853,7 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
         const char *Constraint =
             TREE_STRING_POINTER(TREE_VALUE(TREE_PURPOSE(Output)));
 #if (GCC_MAJOR > 4)
+        OutputTvec[i] = TREE_VALUE(Output);
         GConstraints[i] =
 #endif
             Constraints[i] = Constraint;
@@ -8849,6 +8867,7 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
         const char *Constraint =
             TREE_STRING_POINTER(TREE_VALUE(TREE_PURPOSE(Input)));
 #if (GCC_MAJOR > 4)
+        InputTvec[i] = TREE_VALUE(Input);
         GConstraints[i] =
 #endif
             Constraints[NumOutputs + i] = Constraint;
@@ -8936,6 +8955,10 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
       for (unsigned i = 0; i != NumOutputs; ++i) {
         tree Output = gimple_asm_output_op(MIG_TO_GASM(stmt), i);
         tree Operand = TREE_VALUE(Output);
+#if (GCC_MAJOR > 4)
+        tree Val = TREE_VALUE(Output);
+        tree Ty = TREE_TYPE(Val);
+#endif
 
         // Parse the output constraint.
         const char *Constraint = Constraints[i];
@@ -9005,6 +9028,51 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
           CallOps.push_back(Dest.Ptr);
           OutputLocations.push_back(std::make_pair(false, CallOps.size() - 1));
         }
+
+#if (GCC_MAJOR > 4)
+        rtx Op;
+        if ((TREE_CODE(Val) == INDIRECT_REF
+                    && AllowsMem)
+                || (DECL_P(Val)
+                    && (AllowsMem || REG_P(DECL_RTL(Val)))
+                    && !(REG_P(DECL_RTL(Val))
+                        && GET_MODE(DECL_RTL(Val)) != TYPE_MODE(Ty)))
+                || !AllowsReg
+                || IsInOut) {
+          Op = expand_expr(Val, NULL_RTX, VOIDmode,
+                  !AllowsReg ? EXPAND_MEMORY : EXPAND_WRITE);
+          if (MEM_P(Op))
+            Op = validize_mem(Op);
+
+          if (!AllowsReg && MEM_P(Op))
+            error("output not directly addressable");
+          if ((!AllowsMem && MEM_P(Op)) || GET_CODE(Op) == CONCAT) {
+            rtx OldOp = Op;
+            Op = gen_reg_rtx(GET_MODE(Op));
+
+            if (IsInOut)
+              emit_move_insn(Op, OldOp);
+
+            push_to_sequence2(AfterRtlSeq, AfterRtlEnd);
+            emit_move_insn(OldOp, Op);
+            AfterRtlSeq = get_insns();
+            AfterRtlEnd = get_last_insn();
+            end_sequence();
+          }
+        } else {
+          Op = assign_temp(Ty, 0, 1);
+          Op = validize_mem(Op);
+	      if (!MEM_P(Op) && TREE_CODE(Val) == SSA_NAME)
+            set_reg_attrs_for_decl_rtl(SSA_NAME_VAR(Val), Op);
+
+          push_to_sequence2(AfterRtlSeq, AfterRtlEnd);
+          expand_assignment(Val, make_tree(Ty, Op), false);
+          AfterRtlSeq = get_insns();
+          AfterRtlEnd = get_last_insn();
+          end_sequence();
+        }
+        OutputRvec[i] = Op;
+#endif
       }
 
       // Process inputs.
@@ -9179,6 +9247,39 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
         // If there is a simpler form for the register constraint, use it.
         std::string Simplified = CanonicalizeConstraint(Constraint);
         ConstraintStr += Simplified;
+
+#if (GCC_MAJOR > 4)
+        // EXPAND_INITIALIZER will not generate code for valid initializer
+        // constants, but will still generate code for other types of operand.
+        // This is the behavior we want for constant constraints.
+        rtx Op;
+        Op = expand_expr(Val, NULL_RTX, VOIDmode,
+                AllowsReg ? EXPAND_NORMAL
+                : AllowsMem ? EXPAND_MEMORY
+                : EXPAND_INITIALIZER);
+
+        // Never pass a CONCAT to an ASM.
+        if (GET_CODE(Op) == CONCAT)
+          Op = force_reg(GET_MODE(Op), Op);
+        else if (MEM_P(Op))
+          Op = validize_mem(Op);
+
+        if (asm_operand_ok(Op, Constraint, NULL) <= 0) {
+	      if (AllowsReg && TYPE_MODE(type) != BLKmode)
+	        Op = force_reg(TYPE_MODE(type), Op);
+	      else if (!AllowsMem)
+	        warning(0, "asm operand %d probably doesn%'t match constraints",
+                    i + NumOutputs);
+	      else if (MEM_P(Op)) {
+	        // We won't recognize either volatile memory or memory
+            // with a queued address as available a memory_operand
+            // at this point.  Ignore it: clearly this *is* a memory.
+	      }
+	      else
+	        llvm_unreachable();
+	    }
+        InputRvec[i] = Op;
+#endif
       }
 
       // Process clobbers.
@@ -9208,18 +9309,54 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
         tree clobbers = NULL_TREE;
         if (NumClobbers) {
           tree t = clobbers = gimple_asm_clobber_op(MIG_TO_GASM(stmt), 0);
+#if (GCC_MAJOR > 4)
+          ClobberRvec.reserve(NumClobbers);
+#endif
           for (unsigned i = 1; i < NumClobbers; i++) {
             TREE_CHAIN(t) = gimple_asm_clobber_op(MIG_TO_GASM(stmt), i);
             t = gimple_asm_clobber_op(MIG_TO_GASM(stmt), i);
+#if (GCC_MAJOR > 4)
+            const char *RegName = TREE_STRING_POINTER(TREE_VALUE(t));
+            int NumRegs, Ret;
+
+            Ret = decode_reg_name_and_count(RegName, &NumRegs);
+	        if (Ret < 0) {
+	          if (Ret == -2) {
+		        // Diagnose during gimplification?
+		        error("unknown register name %qs in %<asm%>", RegName);
+		      } else if (Ret == -4) {
+		        rtx X = gen_rtx_MEM(BLKmode, gen_rtx_SCRATCH(VOIDmode));
+		        ClobberRvec.safe_push(X);
+		      } else {
+		        // Otherwise we should have -1 == empty string
+                // or -3 == cc, which is not a register.
+		        assert((Ret == -1 || Ret == -3) && "which is not a register.");
+		      }
+	        } else {
+	          for (int Reg = Ret; Reg < Ret + NumRegs; Reg++) {
+		        // Clobbering the PIC register is an error.
+		        if (Reg == (int)PIC_OFFSET_TABLE_REGNUM) {
+		          // Diagnose during gimplification?
+                  error ("PIC register clobbered by %qs in %<asm%>", RegName);
+		        } else {
+	              SET_HARD_REG_BIT(ClobberedRegs, Reg);
+	              rtx X = gen_rtx_REG(reg_raw_mode[Reg], Reg);
+		          ClobberRvec.safe_push(X);
+                }
+	          }
+            }
+#endif
           }
         }
 
-        Clobbers =
 #if (GCC_MAJOR > 4)
-            // FIXME targetm.md_asm_adjust(OutputRvec, InputRvec, GConstraints, clobbers);
-            0;
+        rtx_insn *AfterMdSeq = NULL;
+        if (targetm.md_asm_adjust)
+          AfterMdSeq = targetm.md_asm_adjust(OutputRvec, InputRvec,
+                                             GConstraints, ClobberRvec,
+                                             ClobberedRegs);
 #else
-            targetm.md_asm_clobbers(outputs, inputs, clobbers);
+        Clobbers = targetm.md_asm_clobbers(outputs, inputs, clobbers);
 #endif
       }
 
