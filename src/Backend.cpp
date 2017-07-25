@@ -666,11 +666,6 @@ static void output_ident(const char *ident_str) {
 
 /// CreateModule - Create and initialize a module to output LLVM IR to.
 static void CreateModule(const std::string &TargetTriple) {
-  // Create the module itself.
-  StringRef ModuleID = main_input_filename ? main_input_filename : "";
-  if (!TheModule)
-    TheModule = new Module(ModuleID, TheContext);
-
 #if GCC_VERSION_CODE < GCC_VERSION(4, 8)
 #ifdef IDENT_ASM_OP
   if (!flag_no_ident) {
