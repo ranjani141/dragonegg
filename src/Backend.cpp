@@ -2510,7 +2510,11 @@ public:
 #endif
 
 // Garbage collector roots.
+#if (GCC_MAJOR > 4)
+extern const struct ggc_root_tab gt_ggc_r__gt_cache_inc[];
+#else
 extern const struct ggc_cache_tab gt_ggc_rc__gt_cache_h[];
+#endif
 
 /// PluginFlags - Flag arguments for the plugin.
 
@@ -2657,12 +2661,13 @@ int __attribute__((visibility("default"))) plugin_init(
 
   // Register our garbage collector roots.
   // https://gcc.gnu.org/ml/gcc-patches/2014-11/msg02965.html
-#if (GCC_MAJOR < 5)
-  register_callback(plugin_name, PLUGIN_REGISTER_GGC_CACHES, NULL,
-#else
+#if (GCC_MAJOR > 4)
   register_callback(plugin_name, PLUGIN_REGISTER_GGC_ROOTS, NULL,
-#endif
+                    const_cast<ggc_root_tab *>(gt_ggc_r__gt_cache_inc));
+#else
+  register_callback(plugin_name, PLUGIN_REGISTER_GGC_CACHES, NULL,
                     const_cast<ggc_cache_tab *>(gt_ggc_rc__gt_cache_h));
+#endif
 
   // Perform late initialization just before processing the compilation unit.
   register_callback(plugin_name, PLUGIN_START_UNIT, llvm_start_unit, NULL);
