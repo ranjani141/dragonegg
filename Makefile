@@ -193,7 +193,7 @@ clean:
 # directory in GCC_BUILD_DIR.
 # FIXME: gengtype does not support macro https://gcc.gnu.org/ml/gcc/2017-07/msg00061.html
 # You have to comment #if (GCC_MAJOR == XXX) not feet your GCC version.
-GENGTYPE_INPUT=$(SRC_DIR)/Cache.cpp
+GENGTYPE_INPUT=$(SRC_DIR)/Cache$(GCC_MAJOR).cpp
 GENGTYPE_OUTPUT=$(INCLUDE_DIR)/dragonegg/gt-cache-$(GCC_MAJOR).$(GCC_MINOR).inc
 .PHONY: gt-cache.inc
 gt-cache.inc:
