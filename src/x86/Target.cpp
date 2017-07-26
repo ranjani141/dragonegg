@@ -912,8 +912,13 @@ bool TreeToLLVM::TargetIntrinsicLower(GimpleTy *stmt, tree fndecl,
         // create i32 constant
         // https://reviews.llvm.org/rL229069
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-        // We'll be shuffling in zeroes.
-        Result = Constant::getNullValue(VecTy);
+        Ops[1] = Ops[0];
+        Ops[0] = Constant::getNullValue(VecTy);
+        SmallVector<Constant *, 16> Indices;
+        for (unsigned i = 0; i != 16; ++i)
+          Indices.push_back(ConstantInt::get(IntTy, (shiftVal - 16) + i));
+        Value *SV = ConstantVector::get(Indices);
+        Result = Builder.CreateShuffleVector(Ops[1], Ops[0], SV, "palignr");
         Result = Builder.CreateBitCast(Result, ResultType, "cast");
 #else
         Function *F =
