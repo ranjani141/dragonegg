@@ -1993,6 +1993,8 @@ public:
       : rtl_opt_pass(pass_data_rtl_emit_function, ctxt) {}
 
   virtual unsigned int execute(function *) { return rtl_emit_function(); }
+
+  opt_pass *clone() { return new pass_rtl_emit_function(m_ctxt); }
 };
 #endif
 
@@ -2310,7 +2312,7 @@ class pass_gimple_null : public gimple_opt_pass {
 public:
   pass_gimple_null(gcc::context *ctxt)
       : gimple_opt_pass(pass_data_gimple_null, ctxt) {}
-  opt_pass * clone () { return new pass_gimple_null(m_ctxt); }
+  opt_pass *clone() { return new pass_gimple_null(m_ctxt); }
 };
 #endif
 
@@ -2431,7 +2433,7 @@ public:
                        NULL, /* function_transform */
                        NULL) /* variable_transform */
     {}
-  opt_pass * clone () { return new pass_ipa_null(m_ctxt); }
+  opt_pass *clone() { return new pass_ipa_null(m_ctxt); }
 };
 #endif
 
@@ -2469,6 +2471,8 @@ const pass_data pass_data_rtl_null = {
 class pass_rtl_null : public rtl_opt_pass {
 public:
   pass_rtl_null(gcc::context *ctxt) : rtl_opt_pass(pass_data_rtl_null, ctxt) {}
+
+  opt_pass *clone() { return new pass_rtl_null(m_ctxt); }
 };
 #endif
 
@@ -2885,6 +2889,7 @@ int __attribute__((visibility("default"))) plugin_init(
   register_callback(plugin_name, PLUGIN_PASS_MANAGER_SETUP, NULL, &pass_info);
 #endif
 
+#if (GCC_MAJOR < 5)
   pass_info.pass =
 #if (GCC_MAJOR < 5)
       &pass_ipa_null.pass;
@@ -2895,6 +2900,7 @@ int __attribute__((visibility("default"))) plugin_init(
   pass_info.ref_pass_instance_number = 0;
   pass_info.pos_op = PASS_POS_REPLACE;
   register_callback(plugin_name, PLUGIN_PASS_MANAGER_SETUP, NULL, &pass_info);
+#endif
 
 #if GCC_VERSION_CODE < GCC_VERSION(4, 6)
   pass_info.pass = &pass_ipa_null.pass;
@@ -2987,6 +2993,7 @@ int __attribute__((visibility("default"))) plugin_init(
     register_callback(plugin_name, PLUGIN_PASS_MANAGER_SETUP, NULL, &pass_info);
 
     // Disable pass_mudflap_2. ???
+#if (GCC_MAJOR < 5)
     pass_info.pass =
 #if (GCC_MAJOR < 5)
         &pass_gimple_null.pass;
@@ -2997,6 +3004,7 @@ int __attribute__((visibility("default"))) plugin_init(
     pass_info.ref_pass_instance_number = 0;
     pass_info.pos_op = PASS_POS_REPLACE;
     register_callback(plugin_name, PLUGIN_PASS_MANAGER_SETUP, NULL, &pass_info);
+#endif
 
     // Disable pass_cleanup_cfg_post_optimizing.
     pass_info.pass =
