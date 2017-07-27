@@ -63,9 +63,9 @@ using namespace llvm;
 
 // https://reviews.llvm.org/D19094
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-static LLVMContext &Context = TheModule->getContext();
+static LLVMContext TheContext;
 #else
-static LLVMContext &Context = getGlobalContext();
+static LLVMContext &TheContext = getGlobalContext();
 #endif
 
 /// getTBAARoot - Return the root of the TBAA tree for this compilation unit.
@@ -76,6 +76,12 @@ static MDNode *getTBAARoot() {
     // the names of the nodes we hang off it have no intrinsic meaning: nodes
     // from different compilation units must not be merged even if they have the
     // same name.
+    LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+        TheModule->getContext();
+#else
+        TheContext;
+#endif
     MDBuilder MDHelper(Context);
     Root = MDHelper.createAnonymousTBAARoot();
   }
@@ -155,6 +161,12 @@ MDNode *describeAliasSet(tree t) {
       TYPE_CANONICAL(TYPE_MAIN_VARIANT(isa<TYPE>(t) ? t : TREE_TYPE(t)));
   std::string TreeName =
       ("alias set " + Twine(alias_set) + ": " + getDescriptiveName(type)).str();
+  LLVMContext &Context =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+      TheModule->getContext();
+#else
+      TheContext;
+#endif
   MDBuilder MDHelper(Context);
 
   MDNode *AliasTag = MDHelper.createTBAANode(TreeName, getTBAARoot());
