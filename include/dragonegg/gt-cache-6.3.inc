@@ -25,14 +25,26 @@ along with GCC; see the file COPYING3.  If not see
   if (X != NULL) gt_ggc_mx_hash_table_WeakVHCacheHasher_ (X);\
   } while (0)
 extern void gt_ggc_mx_hash_table_WeakVHCacheHasher_ (void *);
+#define gt_ggc_m_11tree2WeakVH(X) do { \
+  if (X != NULL) gt_ggc_mx_tree2WeakVH (X);\
+  } while (0)
+extern void gt_ggc_mx_tree2WeakVH (void *);
 #define gt_ggc_m_26hash_table_TypeCacheHaser_(X) do { \
   if (X != NULL) gt_ggc_mx_hash_table_TypeCacheHaser_ (X);\
   } while (0)
 extern void gt_ggc_mx_hash_table_TypeCacheHaser_ (void *);
+#define gt_ggc_m_9tree2Type(X) do { \
+  if (X != NULL) gt_ggc_mx_tree2Type (X);\
+  } while (0)
+extern void gt_ggc_mx_tree2Type (void *);
 #define gt_ggc_m_26hash_table_intCacheHasher_(X) do { \
   if (X != NULL) gt_ggc_mx_hash_table_intCacheHasher_ (X);\
   } while (0)
 extern void gt_ggc_mx_hash_table_intCacheHasher_ (void *);
+#define gt_ggc_m_8tree2int(X) do { \
+  if (X != NULL) gt_ggc_mx_tree2int (X);\
+  } while (0)
+extern void gt_ggc_mx_tree2int (void *);
 #define gt_ggc_m_24vec_ivarref_entry_va_gc_(X) do { \
   if (X != NULL) gt_ggc_mx_vec_ivarref_entry_va_gc_ (X);\
   } while (0)
@@ -1221,6 +1233,30 @@ gt_ggc_mx (struct WeakVHCacheHasher& x_r ATTRIBUTE_UNUSED)
 }
 
 void
+gt_ggc_mx_tree2WeakVH (void *x_p)
+{
+  struct tree2WeakVH * const x = (struct tree2WeakVH *)x_p;
+  if (ggc_test_and_set_mark (x))
+    {
+      gt_ggc_m_9tree_node ((*x).base.from);
+    }
+}
+
+void
+gt_ggc_mx (struct tree2WeakVH& x_r ATTRIBUTE_UNUSED)
+{
+  struct tree2WeakVH * ATTRIBUTE_UNUSED x = &x_r;
+  gt_ggc_m_9tree_node ((*x).base.from);
+}
+
+void
+gt_ggc_mx (struct tree2WeakVH *& x)
+{
+  if (x)
+    gt_ggc_mx_tree2WeakVH ((void *) x);
+}
+
+void
 gt_ggc_mx_hash_table_TypeCacheHaser_ (void *x_p)
 {
   hash_table<TypeCacheHaser> * const x = (hash_table<TypeCacheHaser> *)x_p;
@@ -1237,6 +1273,30 @@ gt_ggc_mx (struct TypeCacheHaser& x_r ATTRIBUTE_UNUSED)
 }
 
 void
+gt_ggc_mx_tree2Type (void *x_p)
+{
+  struct tree2Type * const x = (struct tree2Type *)x_p;
+  if (ggc_test_and_set_mark (x))
+    {
+      gt_ggc_m_9tree_node ((*x).base.from);
+    }
+}
+
+void
+gt_ggc_mx (struct tree2Type& x_r ATTRIBUTE_UNUSED)
+{
+  struct tree2Type * ATTRIBUTE_UNUSED x = &x_r;
+  gt_ggc_m_9tree_node ((*x).base.from);
+}
+
+void
+gt_ggc_mx (struct tree2Type *& x)
+{
+  if (x)
+    gt_ggc_mx_tree2Type ((void *) x);
+}
+
+void
 gt_ggc_mx_hash_table_intCacheHasher_ (void *x_p)
 {
   hash_table<intCacheHasher> * const x = (hash_table<intCacheHasher> *)x_p;
@@ -1250,6 +1310,30 @@ void
 gt_ggc_mx (struct intCacheHasher& x_r ATTRIBUTE_UNUSED)
 {
   struct intCacheHasher * ATTRIBUTE_UNUSED x = &x_r;
+}
+
+void
+gt_ggc_mx_tree2int (void *x_p)
+{
+  struct tree2int * const x = (struct tree2int *)x_p;
+  if (ggc_test_and_set_mark (x))
+    {
+      gt_ggc_m_9tree_node ((*x).base.from);
+    }
+}
+
+void
+gt_ggc_mx (struct tree2int& x_r ATTRIBUTE_UNUSED)
+{
+  struct tree2int * ATTRIBUTE_UNUSED x = &x_r;
+  gt_ggc_m_9tree_node ((*x).base.from);
+}
+
+void
+gt_ggc_mx (struct tree2int *& x)
+{
+  if (x)
+    gt_ggc_mx_tree2int ((void *) x);
 }
 
 /* GC roots.  */

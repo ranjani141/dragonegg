@@ -50,7 +50,7 @@ using namespace llvm;
 
 // Hash table mapping trees to integers.
 
-struct GTY(()) tree2int {
+struct GTY((for_user)) tree2int {
   struct tree_map_base base;
   int GTY((skip)) val;
 };
@@ -73,7 +73,7 @@ static GTY((cache)) hash_table<intCacheHasher> *intCache;
 // Hash table mapping trees to Type*.
 
 // Forward declare Type for the benefit of gengtype.
-struct GTY(()) tree2Type {
+struct GTY((for_user)) tree2Type {
   struct tree_map_base base;
   Type *GTY((skip)) Ty;
 };
@@ -96,7 +96,7 @@ static GTY((cache)) hash_table<TypeCacheHaser> *TypeCache;
 // Hash table mapping trees to WeakVH.
 
 // Forward declare WeakVH for the benefit of gengtype.
-struct GTY(()) tree2WeakVH {
+struct GTY((for_user)) tree2WeakVH {
   struct tree_map_base base;
   WeakVH GTY((skip)) V;
 };

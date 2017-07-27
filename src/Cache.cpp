@@ -59,7 +59,12 @@ using namespace llvm;
 
 // Hash table mapping trees to integers.
 
-struct GTY(()) tree2int {
+#if (GCC_MAJOR > 4)
+struct GTY((for_user))
+#else
+struct GTY(())
+#endif
+    tree2int {
   struct tree_map_base base;
   int GTY((skip)) val;
 };
@@ -95,7 +100,12 @@ static GTY((cache)) hash_table<intCacheHasher> *intCache;
 #ifndef IN_GCC
 struct Type;
 #endif
-struct GTY(()) tree2Type {
+#if (GCC_MAJOR > 4)
+struct GTY((for_user))
+#else
+struct GTY(())
+#endif
+    tree2Type {
   struct tree_map_base base;
 #ifndef IN_GCC
   struct
@@ -135,7 +145,12 @@ static GTY((cache)) hash_table<TypeCacheHaser> *TypeCache;
 #ifndef IN_GCC
 struct WeakVH;
 #endif
-struct GTY(()) tree2WeakVH {
+#if (GCC_MAJOR > 4)
+struct GTY((for_user))
+#else
+struct GTY(())
+#endif
+    tree2WeakVH {
   struct tree_map_base base;
 #ifndef IN_GCC
   struct
