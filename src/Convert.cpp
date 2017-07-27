@@ -93,6 +93,10 @@ extern "C" {
 #endif
 #include "tree-pass.h"
 
+#if __linux__
+void *C_alloca(size_t size) { return alloca(size); }
+#endif
+
 #if (GCC_MAJOR > 4)
 #define ENTRY_BLOCK_PTR         (cfun->cfg->x_entry_block_ptr)
 #define FOR_EACH_BB(BB) FOR_EACH_BB_FN (BB, cfun)
