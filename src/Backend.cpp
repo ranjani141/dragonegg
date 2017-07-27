@@ -2310,6 +2310,7 @@ class pass_gimple_null : public gimple_opt_pass {
 public:
   pass_gimple_null(gcc::context *ctxt)
       : gimple_opt_pass(pass_data_gimple_null, ctxt) {}
+  opt_pass * clone () { return new pass_gimple_null(m_ctxt); }
 };
 #endif
 
@@ -2430,6 +2431,7 @@ public:
                        NULL, /* function_transform */
                        NULL) /* variable_transform */
     {}
+  opt_pass * clone () { return new pass_ipa_null(m_ctxt); }
 };
 #endif
 
@@ -2506,6 +2508,7 @@ class pass_simple_ipa_null : public simple_ipa_opt_pass {
 public:
   pass_simple_ipa_null(gcc::context *ctxt)
       : simple_ipa_opt_pass(pass_data_simple_ipa_null, ctxt) {}
+  opt_pass * clone () { return new pass_simple_ipa_null(m_ctxt); }
 };
 #endif
 
