@@ -2872,6 +2872,7 @@ int __attribute__((visibility("default"))) plugin_init(
   }
 
   // Disable all LTO passes.
+#if (GCC_MAJOR < 5)
   pass_info.pass =
 #if (GCC_MAJOR < 5)
       &pass_ipa_null.pass;
@@ -2882,6 +2883,7 @@ int __attribute__((visibility("default"))) plugin_init(
   pass_info.ref_pass_instance_number = 0;
   pass_info.pos_op = PASS_POS_REPLACE;
   register_callback(plugin_name, PLUGIN_PASS_MANAGER_SETUP, NULL, &pass_info);
+#endif
 
   pass_info.pass =
 #if (GCC_MAJOR < 5)
