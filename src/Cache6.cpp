@@ -35,10 +35,6 @@
 
 // GCC headers
 #include "auto-host.h"
-#ifndef ENABLE_BUILD_WITH_CXX
-#include <cstring> // Otherwise included by system.h with C linkage.
-extern "C" {
-#endif
 #include "config.h"
 // Stop GCC declaring 'getopt' as it can clash with the system's declaration.
 #undef HAVE_DECL_GETOPT
@@ -49,9 +45,6 @@ extern "C" {
 #include "tree-core.h"
 
 #include "ggc.h"
-#ifndef ENABLE_BUILD_WITH_CXX
-} // extern "C"
-#endif
 
 using namespace llvm;
 
@@ -80,16 +73,9 @@ static GTY((cache)) hash_table<intCacheHasher> *intCache;
 // Hash table mapping trees to Type*.
 
 // Forward declare Type for the benefit of gengtype.
-#ifndef IN_GCC
-struct Type;
-#endif
 struct GTY(()) tree2Type {
   struct tree_map_base base;
-#ifndef IN_GCC
-  struct
-#endif
-      Type *
-          GTY((skip)) Ty;
+  Type *GTY((skip)) Ty;
 };
 
 #define tree2Type_eq tree_map_base_eq
@@ -110,16 +96,9 @@ static GTY((cache)) hash_table<TypeCacheHaser> *TypeCache;
 // Hash table mapping trees to WeakVH.
 
 // Forward declare WeakVH for the benefit of gengtype.
-#ifndef IN_GCC
-struct WeakVH;
-#endif
 struct GTY(()) tree2WeakVH {
   struct tree_map_base base;
-#ifndef IN_GCC
-  struct
-#endif
-      WeakVH
-          GTY((skip)) V;
+  WeakVH GTY((skip)) V;
 };
 
 #define tree2WeakVH_eq tree_map_base_eq
@@ -142,13 +121,7 @@ struct WeakVHCacheHasher : ggc_cache_ptr_hash<tree2WeakVH> {
 static GTY((cache)) hash_table<WeakVHCacheHasher> *WeakVHCache;
 
 // Include the garbage collector header.
-#ifndef ENABLE_BUILD_WITH_CXX
-extern "C" {
-#endif
 #include "dragonegg/gt-cache-6.3.inc"
-#ifndef ENABLE_BUILD_WITH_CXX
-} // extern "C"
-#endif
 
 bool getCachedInteger(tree t, int &Val) {
   if (!intCache)
