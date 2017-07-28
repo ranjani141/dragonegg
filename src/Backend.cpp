@@ -431,7 +431,11 @@ static void ConfigureLLVM(void) {
   if (!quiet_flag || flag_detailed_statistics)
     Args.push_back("--stats");
   if (flag_verbose_asm)
+#if (GCC_MAJOR > 4)
+    Args.push_back("-dag-dump-verbose");
+#else
     Args.push_back("--asm-verbose");
+#endif
   if (DebugPassStructure)
     Args.push_back("--debug-pass=Structure");
   if (DebugPassArguments)
