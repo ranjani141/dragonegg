@@ -2317,7 +2317,10 @@ public:
 /// execute_correct_state - Correct the cgraph state to ensure that newly
 /// inserted functions are processed before being converted to LLVM IR.
 static unsigned int execute_correct_state(void) {
-#if (GCC_MAJOR < 5)
+#if (GCC_MAJOR > 4)
+  if (symtab->state < IPA_SSA)
+    symtab->state = IPA_SSA;
+#else
   if (cgraph_state < CGRAPH_STATE_IPA_SSA)
     cgraph_state = CGRAPH_STATE_IPA_SSA;
 #endif
