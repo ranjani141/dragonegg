@@ -1663,6 +1663,7 @@ static const struct ptt processor_target_table[PROCESSOR_max] =
   {&atom_cost, 16, 7, 16, 7, 16}
 };
 
+#if (GCC_MINOR < 8)
 static const char *const cpu_names[TARGET_CPU_DEFAULT_max] =
 {
   "generic",
@@ -1688,7 +1689,7 @@ static const char *const cpu_names[TARGET_CPU_DEFAULT_max] =
   "k8",
   "amdfam10"
 };
-
+#endif
 
 /* Return the "natural" mode for TYPE.  In most cases, this is just TYPE_MODE.
    But in the case of vector types, it is some vector mode.
