@@ -2693,6 +2693,10 @@ int __attribute__((visibility("default"))) plugin_init(
 
   // Turn off all gcc optimization passes.
   if (!EnableGCCOptimizations) {
+#ifdef DRAGONEGG_DEBUG
+    printf("DEBUG: %s, line %d: %s: Turn off all gcc optimization passes.\n",
+            __FILE__, __LINE__, __func__);
+#endif
 // TODO: figure out a good way of turning off ipa optimization passes.
 // Could just set optimize to zero (after taking a copy), but this would
 // also impact front-end optimizations.
