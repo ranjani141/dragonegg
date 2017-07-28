@@ -2311,6 +2311,7 @@ public:
   pass_gimple_null(gcc::context *ctxt)
       : gimple_opt_pass(pass_data_gimple_null, ctxt) {}
   opt_pass *clone() { return new pass_gimple_null(m_ctxt); }
+  virtual bool gate(function *) { return gate_null(); }
 };
 #endif
 
@@ -2435,6 +2436,7 @@ public:
                        NULL) /* variable_transform */
     {}
   opt_pass *clone() { return new pass_ipa_null(m_ctxt); }
+  virtual bool gate(function *) { return gate_null(); }
 };
 #endif
 
@@ -2474,6 +2476,7 @@ public:
   pass_rtl_null(gcc::context *ctxt) : rtl_opt_pass(pass_data_rtl_null, ctxt) {}
 
   opt_pass *clone() { return new pass_rtl_null(m_ctxt); }
+  virtual bool gate(function *) { return gate_null(); }
 };
 #endif
 
@@ -2514,6 +2517,7 @@ public:
   pass_simple_ipa_null(gcc::context *ctxt)
       : simple_ipa_opt_pass(pass_data_simple_ipa_null, ctxt) {}
   opt_pass * clone () { return new pass_simple_ipa_null(m_ctxt); }
+  virtual bool gate(function *) { return gate_null(); }
 };
 #endif
 
