@@ -103,7 +103,7 @@ extern "C" {
 #endif
 #include "target.h" // For targetm.
 #include "toplev.h"
-#if (GCC_MAJOR == 4)
+#if (GCC_MAJOR < 5)
 #include "tree-flow.h"
 #else
 #include "tree-cfg.h"
@@ -214,6 +214,8 @@ static struct varpool_node *varpool_symbol(struct varpool_node *N) { return N; }
   for ((node) = varpool_nodes; (node); (node) = (node)->next)
 
 #elif (GCC_MAJOR > 4)
+
+#define asm_nodes symtab->first_asm_symbol()
 
 #define ipa_ref_list_referring_iterate(L,I,P) \
   (L)->referring.iterate ((I), &(P))
@@ -2000,11 +2002,7 @@ public:
 
 /// emit_file_scope_asms - Output any file-scope assembly.
 static void emit_file_scope_asms() {
-#if (GCC_MAJOR > 4)
-  for (struct asm_node *anode = symtab->first_asm_symbol(); anode; anode = anode->next) {
-#else
   for (struct asm_node *anode = asm_nodes; anode; anode = anode->next) {
-#endif
     tree string = anode->asm_str;
     if (isa<ADDR_EXPR>(string))
       string = TREE_OPERAND(string, 0);
