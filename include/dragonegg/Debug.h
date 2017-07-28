@@ -27,9 +27,15 @@
 #include "dragonegg/Internals.h"
 
 // LLVM headers
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
 #include "llvm/IR/DebugInfo.h"
 #include "llvm/IR/DIBuilder.h"
 #include "llvm/IR/ValueHandle.h"
+#else
+#include "llvm/DebugInfo.h"
+#include "llvm/DIBuilder.h"
+#include "llvm/Support/ValueHandle.h"
+#endif
 #include "llvm/Support/Allocator.h"
 
 // System headers

@@ -48,10 +48,14 @@
 #endif
 #include "llvm/CodeGen/RegAllocRegistry.h"
 #include "llvm/IR/DataLayout.h"
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
 #include "llvm/IR/IRPrintingPasses.h"
+#include "llvm/IR/Verifier.h"
+#else
+#include "llvm/Analysis/Verifier.h"
+#endif
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
-#include "llvm/IR/Verifier.h"
 #include "llvm/MC/SubtargetFeature.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/ManagedStatic.h"
@@ -520,6 +524,7 @@ static std::string ComputeTargetTriple() {
   return NewTriple;
 }
 
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
 static void setNoFramePointerElim(bool NoFramePointerElim) {
   for (auto &F : *TheModule) {
     auto Attrs = F.getAttributes();
@@ -534,6 +539,7 @@ static void setNoFramePointerElim(bool NoFramePointerElim) {
     F.setAttributes(Attrs);
   }
 }
+#endif
 
 /// CreateTargetMachine - Create the TargetMachine we will generate code with.
 static void CreateTargetMachine(const std::string &TargetTriple) {
@@ -641,7 +647,9 @@ static void CreateTargetMachine(const std::string &TargetTriple) {
   // Binutils does not yet support the use of file directives with an explicit
   // directory.  FIXME: Once GCC learns to detect support for this, condition
   // on what GCC detected.
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
   Options.MCOptions.MCUseDwarfDirectory = false;
+#endif
 
   TheTarget = TME->createTargetMachine(TargetTriple, CPU, FeatureStr, Options,
                                        RelocModel, CMModel, CodeGenOptLevel());
@@ -697,10 +705,13 @@ static void CreateModule(const std::string &TargetTriple) {
   // https://reviews.llvm.org/D11103
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
   TheModule->setDataLayout(TheModule->getDataLayout());
-#else
+#elif LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
   TheModule->setDataLayout(TheTarget->getSubtargetImpl()
                                ->getDataLayout()
                                ->getStringRepresentation());
+#else
+  TheModule->setDataLayout(
+      TheTarget->getDataLayout()->getStringRepresentation());
 #endif
 }
 
@@ -764,8 +775,10 @@ static void InitializeBackend(void) {
 
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
   TheFolder = new TargetFolder(TheModule->getDataLayout());
-#else
+#elif LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
   TheFolder = new TargetFolder(TheTarget->getSubtargetImpl()->getDataLayout());
+#else
+  TheFolder = new TargetFolder(TheTarget->getDataLayout());
 #endif
 
   if (debug_info_level > DINFO_LEVEL_NONE) {
@@ -800,6 +813,7 @@ static void InitializeBackend(void) {
 /// InitializeOutputStreams - Initialize the assembly code output streams.
 static void InitializeOutputStreams(bool Binary) {
   assert(!OutStream && "Output stream already initialized!");
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
   std::error_code EC;
 
   OutStream = new raw_fd_ostream(llvm_asm_file_name, EC,
@@ -807,6 +821,15 @@ static void InitializeOutputStreams(bool Binary) {
 
   if (EC)
     report_fatal_error(EC.message());
+#else
+  std::string Error;
+
+  OutStream = new raw_fd_ostream(llvm_asm_file_name, Error,
+                                 Binary ? raw_fd_ostream::F_Binary : 0);
+
+  if (!Error.empty())
+    report_fatal_error(Error);
+#endif
 
   // https://reviews.llvm.org/rL234535
 #if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
@@ -827,10 +850,14 @@ static void createPerFunctionOptimizationPasses() {
   PerFunctionPasses = new FunctionPassManager(TheModule);
 #endif
   // https://reviews.llvm.org/D7992
-#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+  //
+#elif LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
   PerFunctionPasses->add(new DataLayoutPass());
+#else
+  PerFunctionPasses->add(new DataLayout(TheModule));
 #endif
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 3) && LLVM_VERSION_CODE <= LLVM_VERSION(3, 6)
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 3) && LLVM_VERSION_CODE < LLVM_VERSION(3, 7)
   TheTarget->addAnalysisPasses(*PerFunctionPasses);
 #endif
 
@@ -868,9 +895,11 @@ static void createPerFunctionOptimizationPasses() {
     TargetMachine::CodeGenFileType CGFT = TargetMachine::CGFT_AssemblyFile;
     if (EmitObj)
       CGFT = TargetMachine::CGFT_ObjectFile;
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
     std::error_code EC;
     raw_fd_ostream Out(llvm_asm_file_name, EC,
                        EmitObj ? sys::fs::F_None : sys::fs::F_Text);
+#endif
     if (TheTarget->addPassesToEmitFile(*PM,
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
                                        Out,
@@ -894,8 +923,12 @@ static void createPerModuleOptimizationPasses() {
 #else
   PerModulePasses = new PassManager();
 #endif
-#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+  //
+#elif LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
   PerModulePasses->add(new DataLayoutPass());
+#else
+  PerModulePasses->add(new DataLayout(TheModule));
 #endif
 #if LLVM_VERSION_CODE >= LLVM_VERSION(3, 3) && LLVM_VERSION_CODE <= LLVM_VERSION(3, 6)
   TheTarget->addAnalysisPasses(*PerModulePasses);
@@ -936,7 +969,13 @@ static void createPerModuleOptimizationPasses() {
     // Emit an LLVM .ll file to the output.  This is used when passed
     // -emit-llvm -S to the GCC driver.
     InitializeOutputStreams(false);
-    PerModulePasses->add(createPrintModulePass(*OutStream));
+    PerModulePasses->add(createPrintModulePass(
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
+                *OutStream
+#else
+                OutStream
+#endif
+                ));
   } else {
     // If there are passes we have to run on the entire module, we do codegen
     // as a separate "pass" after that happens.

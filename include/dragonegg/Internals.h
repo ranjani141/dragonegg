@@ -23,18 +23,22 @@
 #ifndef DRAGONEGG_INTERNALS_H
 #define DRAGONEGG_INTERNALS_H
 
+#define LLVM_VERSION(major, minor) (((major) << 8) | (minor))
+#define LLVM_VERSION_CODE LLVM_VERSION(LLVM_VERSION_MAJOR, LLVM_VERSION_MINOR)
+
 // LLVM headers
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
 #include "llvm/Analysis/TargetFolder.h"
+#else
+#include "llvm/Support/TargetFolder.h"
+#endif
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/FormattedStream.h"
-
-#define LLVM_VERSION(major, minor) (((major) << 8) | (minor))
-#define LLVM_VERSION_CODE LLVM_VERSION(LLVM_VERSION_MAJOR, LLVM_VERSION_MINOR)
 
 #if LLVM_VERSION_CODE >= LLVM_VERSION(3, 0)
 #  define LLVM_TYPE_Q
@@ -45,7 +49,7 @@
 #define GCC_VERSION(major, minor) (((major) << 8) | (minor))
 #define GCC_VERSION_CODE GCC_VERSION(GCC_MAJOR, GCC_MINOR)
 
-#if __has_attribute(sentinel) || LLVM_GNUC_PREREQ(3, 0, 0)
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 0)
 #define LLVM_END_WITH_NULL __attribute__((sentinel))
 #else
 #define LLVM_END_WITH_NULL
