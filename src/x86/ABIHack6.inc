@@ -2202,35 +2202,8 @@ const char* ix86_tune_feature_names[X86_TUNE_LAST] = {
 /* Feature tests against the various tunings.  */
 unsigned char ix86_tune_features[X86_TUNE_LAST];
 
-/* Feature tests against the various tunings used to create ix86_tune_features
-   based on the processor mask.  */
-static unsigned int initial_ix86_tune_features[X86_TUNE_LAST] = {
-#undef DEF_TUNE
-#define DEF_TUNE(tune, name, selector) selector,
-#undef DEF_TUNE
-};
-
 /* Feature tests against the various architecture variations.  */
 unsigned char ix86_arch_features[X86_ARCH_LAST];
-
-/* Feature tests against the various architecture variations, used to create
-   ix86_arch_features based on the processor mask.  */
-static int initial_ix86_arch_features[X86_ARCH_LAST] = {
-  /* X86_ARCH_CMOV: Conditional move was added for pentiumpro.  */
-  ~(m_386 | m_486 | m_PENT | m_LAKEMONT | m_K6),
-
-  /* X86_ARCH_CMPXCHG: Compare and exchange was added for 80486.  */
-  ~m_386,
-
-  /* X86_ARCH_CMPXCHG8B: Compare and exchange 8 bytes was added for pentium. */
-  ~(m_386 | m_486),
-
-  /* X86_ARCH_XADD: Exchange and add was added for 80486.  */
-  ~m_386,
-
-  /* X86_ARCH_BSWAP: Byteswap was added for 80486.  */
-  ~m_386,
-};
 
 /* In case the average insn count for single function invocation is
    lower than this constant, emit fast (but longer) prologue and

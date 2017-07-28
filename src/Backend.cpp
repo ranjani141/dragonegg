@@ -375,14 +375,14 @@ static bool SizeOfGlobalMatchesDecl(GlobalValue *GV, tree decl) {
   uint64_t gcc_size = getInt64(DECL_SIZE(decl), true);
   const DataLayout *DL =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-      TheTarget->createDataLayout();
+      TheModule->getDataLayout();
 #else
       TheTarget->getSubtargetImpl()->getDataLayout();
 #endif
   unsigned Align = 8 * DL->getABITypeAlignment(Ty);
   return
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-       TheTarget->createDataLayout()->getTypeAllocSizeInBits(Ty)
+       TheModule->getDataLayout()->getTypeAllocSizeInBits(Ty)
 #else
        TheTarget->getSubtargetImpl()->getDataLayout()->getTypeAllocSizeInBits(Ty)
 #endif
@@ -643,7 +643,7 @@ static void CreateTargetMachine(const std::string &TargetTriple) {
                                        RelocModel, CMModel, CodeGenOptLevel());
 
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-  assert(TheTarget->createDataLayout()->isBigEndian() == BYTES_BIG_ENDIAN);
+  assert(TheModule->getDataLayout()->isBigEndian() == BYTES_BIG_ENDIAN);
 #else
   assert(TheTarget->getSubtargetImpl()->getDataLayout()->isBigEndian() == BYTES_BIG_ENDIAN);
 #endif
@@ -692,7 +692,7 @@ static void CreateModule(const std::string &TargetTriple) {
   TheModule->setTargetTriple(TargetTriple);
   // https://reviews.llvm.org/D11103
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-  TheModule->setDataLayout(TheTarget->createDataLayout());
+  TheModule->setDataLayout(TheModule->getDataLayout());
 #else
   TheModule->setDataLayout(TheTarget->getSubtargetImpl()
                                ->getDataLayout()
@@ -759,7 +759,7 @@ static void InitializeBackend(void) {
   CreateModule(TargetTriple);
 
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-  TheFolder = new TargetFolder(TheTarget->createDataLayout());
+  TheFolder = new TargetFolder(TheModule->getDataLayout());
 #else
   TheFolder = new TargetFolder(TheTarget->getSubtargetImpl()->getDataLayout());
 #endif
@@ -2569,6 +2569,9 @@ int __attribute__((visibility("default"))) plugin_init(
         version
 #endif
     ) {
+#ifdef DRAGONEGG_DEBUG
+  printf("DEBUG: %s, line %d: %s\n", __FILE__, __LINE__, __func__);
+#endif
   const char *plugin_name = plugin_info->base_name;
   struct register_pass_info pass_info;
 
@@ -3071,6 +3074,10 @@ int __attribute__((visibility("default"))) plugin_init(
 
   // Run shutdown code when GCC exits.
   register_callback(plugin_name, PLUGIN_FINISH, llvm_finish, NULL);
+
+#ifdef DRAGONEGG_DEBUG
+  printf("DEBUG: %s, line %d: %s\n", __FILE__, __LINE__, __func__);
+#endif
 
   return 0;
 }

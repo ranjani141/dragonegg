@@ -647,7 +647,7 @@ TreeToLLVM *TheTreeToLLVM = 0;
 
 const DataLayout &getDataLayout() {
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-  return TheTarget->createDataLayout();
+  return TheModule->getDataLayout();
 #else
   return *TheTarget->getSubtargetImpl()->getDataLayout();
 #endif

@@ -94,6 +94,10 @@ ifneq ($(GCC_MINOR), 5)
   endif
 endif
 
+ifdef DRAGONEGG_DEBUG
+CPP_OPTIONS+=-DDRAGONEGG_DEBUG
+endif
+
 LD_OPTIONS+=$(shell $(LLVM_CONFIG) --ldflags) $(LDFLAGS)
 
 LLVM_COMPONENTS=ipo scalaropts target
