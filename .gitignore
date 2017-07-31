@@ -21,6 +21,7 @@
 # In-tree build files
 *.d
 *.o
+*.sh
 
 #==============================================================================#
 # Explicit files to ignore (only matches one).
