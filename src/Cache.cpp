@@ -24,10 +24,15 @@
 //===----------------------------------------------------------------------===//
 
 // Plugin headers.
+#include "dragonegg/Internals.h"
 #include "dragonegg/Cache.h"
 
 // LLVM headers
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
 #include "llvm/IR/ValueHandle.h"
+#else
+#include "llvm/Support/ValueHandle.h"
+#endif
 
 // System headers
 #include <cassert>

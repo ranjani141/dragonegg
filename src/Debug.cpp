@@ -258,7 +258,13 @@ void DebugInfo::EmitFunctionStart(tree FnDecl, Function *Fn) {
     RegionStack.push_back(WeakVH(cast<Value>(SP)));
     RegionMap[FnDecl] = WeakVH(cast<Value>(SP));
 #else
-    RegionStack.push_back(SP);
+    RegionStack.push_back(
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
+            SP
+#else
+            WeakVH(SP)
+#endif
+            );
     RegionMap[FnDecl] = WeakVH(SP);
 #endif
     return;
@@ -460,7 +466,10 @@ void DebugInfo::EmitDeclare(tree decl, unsigned Tag, StringRef Name, tree type,
       Tag, VarScope, Name, getOrCreateFile(Loc.file), Loc.line, Ty, optimize);
 #endif
 
-  Instruction *Call = Builder.insertDeclare(AI, D, Builder.createExpression(),
+  Instruction *Call = Builder.insertDeclare(AI, D,
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
+                                            Builder.createExpression(),
+#endif
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
                                             DbgDecl->getDebugLoc(),
 #endif
@@ -509,7 +518,11 @@ void DebugInfo::EmitGlobalVariable(GlobalVariable *GV, tree decl) {
   if (DECL_CONTEXT(decl))
     if (!isa<FUNCTION_DECL>(DECL_CONTEXT(decl)))
       LinkageName = GV->getName();
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
   Builder.createGlobalVariable(
+#else
+  Builder.createStaticVariable(
+#endif
       findRegion(DECL_CONTEXT(decl)), DispName, LinkageName,
       getOrCreateFile(Loc.file), Loc.line, TyD, GV->hasInternalLinkage(), GV);
 }
@@ -578,7 +591,12 @@ MigDIType DebugInfo::createMethodType(tree type) {
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
   DICompositeType *FwdType = Builder.createReplaceableCompositeType(
 #else
-  DIType FwdType = Builder.createReplaceableForwardDecl(
+  DIType FwdType =
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
+     Builder.createReplaceableForwardDecl(
+#else
+     Builder.createForwardDecl(
+#endif
 #endif
     llvm::dwarf::DW_TAG_subroutine_type, StringRef(),
     findRegion(TYPE_CONTEXT(type)), getOrCreateFile(main_input_filename),
@@ -631,8 +649,10 @@ MigDIType DebugInfo::createMethodType(tree type) {
 
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
   llvm::DITypeRefArray EltTypeArray = Builder.getOrCreateTypeArray(makeArrayRef(EltTys));
-#else
+#elif LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
   llvm::DITypeArray EltTypeArray = Builder.getOrCreateTypeArray(EltTys);
+#else
+  llvm::DIArray EltTypeArray = Builder.getOrCreateArray(EltTys);
 #endif
 
   RegionStack.pop_back();
@@ -850,8 +870,10 @@ MigDIType DebugInfo::createStructType(tree type) {
   MigDIType FwdDecl =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
       Builder.createReplaceableCompositeType(
-#else
+#elif LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
       Builder.createReplaceableForwardDecl(
+#else
+      Builder.createForwardDecl(
 #endif
       Tag, GetNodeName(type), TyContext, getOrCreateFile(Loc.file), Loc.line,
       0, 0, 0);
@@ -1153,6 +1175,9 @@ MigDIType DebugInfo::getOrCreateType(tree type) {
   MigDIType Ty;
   switch (TREE_CODE(type)) {
   case ERROR_MARK:
+#if LLVM_VERSION_CODE < LLVM_VERSION(3, 4)
+  case LANG_TYPE:
+#endif
   case TRANSLATION_UNIT_DECL:
   default:
     llvm_unreachable("Unsupported type");
@@ -1160,12 +1185,14 @@ MigDIType DebugInfo::getOrCreateType(tree type) {
 #if GCC_VERSION_CODE > GCC_VERSION(4, 5)
   case NULLPTR_TYPE:
 #endif
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
   case LANG_TYPE: {
     tree name = TYPE_NAME(type);
     if (TREE_CODE(name) == TYPE_DECL)
       name = DECL_NAME(name);
     return Builder.createUnspecifiedType(IDENTIFIER_POINTER(name));
   }
+#endif
 
   case OFFSET_TYPE:
   case POINTER_TYPE:
@@ -1215,8 +1242,10 @@ void DebugInfo::Initialize() {
 
   // Debug info metadata without a version or with an outdated version will be
   // dropped. Add a version here to avoid that.
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
   M.addModuleFlag(llvm::Module::Error, "Debug Info Version",
                   llvm::DEBUG_METADATA_VERSION);
+#endif
   // Each input file is encoded as a separate compile unit in LLVM
   // debugging information output. However, many target specific tool chains
   // prefer to encode only one compile unit in an object file. In this

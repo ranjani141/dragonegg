@@ -53,6 +53,7 @@
 #include "llvm/IR/Verifier.h"
 #else
 #include "llvm/Analysis/Verifier.h"
+#include "llvm/Assembly/PrintModulePass.h"
 #endif
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
@@ -185,7 +186,11 @@ static legacy::PassManager *CodeGenPasses = 0;
 #else
 static FunctionPassManager *PerFunctionPasses = 0;
 static PassManager *PerModulePasses = 0;
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
 static PassManager *CodeGenPasses = 0;
+#else
+static FunctionPassManager *CodeGenPasses = 0;
+#endif
 #endif
 
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
@@ -986,9 +991,13 @@ static void createPerModuleOptimizationPasses() {
     if (PerModulePasses || 1) {
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
       legacy::PassManager *PM = CodeGenPasses = new legacy::PassManager();
-#else
+#elif LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
       PassManager *PM = CodeGenPasses = new PassManager();
       PM->add(new DataLayoutPass());
+#else
+      FunctionPassManager *PM = CodeGenPasses =
+          new FunctionPassManager(TheModule);
+      PM->add(new DataLayout(*TheTarget->getDataLayout()));
 #endif
 #if LLVM_VERSION_CODE >= LLVM_VERSION(3, 3) && LLVM_VERSION_CODE <= LLVM_VERSION(3, 6)
       TheTarget->addAnalysisPasses(*PM);
@@ -1008,9 +1017,11 @@ static void createPerModuleOptimizationPasses() {
       TargetMachine::CodeGenFileType CGFT = TargetMachine::CGFT_AssemblyFile;
       if (EmitObj)
         CGFT = TargetMachine::CGFT_ObjectFile;
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
       std::error_code EC;
       raw_fd_ostream Out(llvm_asm_file_name, EC,
                          EmitObj ? sys::fs::F_None : sys::fs::F_Text);
+#endif
       if (TheTarget->addPassesToEmitFile(*PM,
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
                                          Out,
@@ -1228,8 +1239,13 @@ static void emit_alias(tree decl, tree target) {
     auto *GV = cast<GlobalValue>(Aliasee->stripPointerCasts());
     if (auto *GA = llvm::dyn_cast<GlobalAlias>(GV))
       GV = cast<GlobalValue>(GA->getAliasee()->stripPointerCasts());
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
     auto *GA = GlobalAlias::create(Aliasee->getType()->getElementType(), 0,
                                    Linkage, "", GV);
+#else
+    GlobalAlias *GA =
+        new GlobalAlias(Aliasee->getType(), Linkage, "", Aliasee, TheModule);
+#endif
     handleVisibility(decl, GA);
 
     // Associate it with decl instead of V.
@@ -2017,7 +2033,8 @@ static struct rtl_opt_pass pass_rtl_emit_function = { {
   PROP_ssa | PROP_gimple_leh | PROP_cfg, /* properties_required */
   0,                                     /* properties_provided */
   PROP_ssa | PROP_trees,                 /* properties_destroyed */
-  TODO_verify_ssa | TODO_verify_flow | TODO_verify_stmts
+  TODO_verify_ssa | TODO_verify_flow | TODO_verify_stmts, /* todo_flags_start */
+  TODO_ggc_collect /* todo_flags_finish */
 } };
 #else
 const pass_data pass_data_rtl_emit_function = {
@@ -2295,7 +2312,16 @@ static void llvm_finish_unit(void */*gcc_data*/, void */*user_data*/) {
     void *OldHandlerData = Context.getInlineAsmDiagnosticContext();
     Context.setInlineAsmDiagnosticHandler(InlineAsmDiagnosticHandler, 0);
 
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
     CodeGenPasses->run(*TheModule);
+#else
+    CodeGenPasses->doInitialization();
+    for (Module::iterator I = TheModule->begin(), E = TheModule->end(); I != E;
+         ++I)
+      if (!I->isDeclaration())
+        CodeGenPasses->run(*I);
+    CodeGenPasses->doFinalization();
+#endif
 
     Context.setInlineAsmDiagnosticHandler(OldHandler, OldHandlerData);
   }

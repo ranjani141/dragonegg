@@ -32,7 +32,11 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/IR/MDBuilder.h"
 #include "llvm/IR/Module.h"
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
 #include "llvm/IR/CFG.h"
+#else
+#include "llvm/Support/CFG.h"
+#endif
 #include "llvm/Support/Debug.h"
 #include "llvm/Target/TargetLowering.h"
 #include "llvm/Target/TargetSubtargetInfo.h"
@@ -57,7 +61,7 @@ extern "C" {
 #include "diagnostic.h"
 #include "except.h"
 #include "flags.h"
-#if GCC_VERSION_CODE > GCC_VERSION(4, 6)
+#if GCC_VERSION_CODE > GCC_VERSION(4, 8)
 #include "gimple-pretty-print.h"
 #include "varasm.h"
 #include "rtl.h"
@@ -126,7 +130,7 @@ extern struct target_regs default_target_regs;
 #endif
 
 #if (GCC_MAJOR < 5)
-#if (GCC_MINOR == 6)
+#if (GCC_MINOR < 9)
 extern void debug_gimple_stmt(union gimple_statement_d *);
 #endif
 #else
@@ -648,8 +652,10 @@ TreeToLLVM *TheTreeToLLVM = 0;
 const DataLayout &getDataLayout() {
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
   return TheModule->getDataLayout();
-#else
+#elif LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
   return *TheTarget->getSubtargetImpl()->getDataLayout();
+#else
+  return *TheTarget->getDataLayout();
 #endif
 }
 
@@ -1158,15 +1164,18 @@ void TreeToLLVM::StartFunctionBody() {
     Fn->addFnAttr(Attribute::StackProtectReq);
   else if (flag_stack_protect == 3)
     Fn->addFnAttr(Attribute::StackProtectStrong);
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
   if (flag_stack_protect)
     Fn->addFnAttr("stack-protector-buffer-size",
                   utostr(PARAM_VALUE(PARAM_SSP_BUFFER_SIZE)));
+#endif
 
   // Handle naked attribute
   if (lookup_attribute("naked", DECL_ATTRIBUTES(FnDecl)))
     Fn->addFnAttr(Attribute::Naked);
 
   // Handle frame pointers.
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
   if (flag_omit_frame_pointer) {
     // Eliminate frame pointers everywhere.
     Fn->addFnAttr("no-frame-pointer-elim-non-leaf", "false");
@@ -1174,9 +1183,12 @@ void TreeToLLVM::StartFunctionBody() {
     // Keep frame pointers everywhere.
     Fn->addFnAttr("no-frame-pointer-elim-non-leaf", "true");
   }
+#endif
 
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
 #ifdef LLVM_SET_TARGET_MACHINE_ATTRIBUTES
   LLVM_SET_TARGET_MACHINE_ATTRIBUTES(Fn);
+#endif
 #endif
 
   // Handle annotate attributes
@@ -2986,7 +2998,11 @@ void TreeToLLVM::EmitLandingPads() {
             for (tree type = c->type_list; type; type = TREE_CHAIN(type)) {
               Constant *TypeInfo = ConvertTypeInfo(TREE_VALUE(type));
               // No point in trying to catch a typeinfo that was already caught.
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
               if (!AlreadyCaught.insert(TypeInfo).second)
+#else
+              if (!AlreadyCaught.insert(TypeInfo))
+#endif
                 continue;
               LPadInst->addClause(TypeInfo);
             }
@@ -4611,7 +4627,9 @@ TreeToLLVM::BuildCmpAndSwapAtomic(GimpleTy *stmt, unsigned Bits, bool isBool) {
   Value *C[3] = { Ptr, Old_Val, New_Val };
   Value *Result =
       Builder.CreateAtomicCmpXchg(C[0], C[1], C[2],
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
                                   AtomicOrdering::SequentiallyConsistent,
+#endif
                                   AtomicOrdering::SequentiallyConsistent);
 
   // AtomicCmpXchg has the type {i1,iN}.
@@ -9491,9 +9509,13 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
       // Give the backend a chance to upgrade the inline asm to LLVM code.  This
       // handles some common cases that LLVM has intrinsics for, e.g. x86 bswap ->
       // llvm.bswap.
-#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+#elif LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
       if (const TargetLowering *TLI =
 	  TheTarget->getSubtargetImpl()->getTargetLowering())
+        TLI->ExpandInlineAsm(CV);
+#else
+      if (const TargetLowering *TLI = TheTarget->getTargetLowering())
         TLI->ExpandInlineAsm(CV);
 #endif
     }
@@ -9651,7 +9673,11 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
           for (tree type = c->type_list; type; type = TREE_CHAIN(type)) {
             Value *TypeInfo = ConvertTypeInfo(TREE_VALUE(type));
             // No point in trying to catch a typeinfo that was already caught.
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
             if (!AlreadyCaught.insert(TypeInfo).second)
+#else
+            if (!AlreadyCaught.insert(TypeInfo))
+#endif
               continue;
 
             TypeInfo = Builder.CreateBitCast(TypeInfo, Builder.getInt8PtrTy());

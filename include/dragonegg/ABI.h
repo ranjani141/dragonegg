@@ -146,7 +146,7 @@ getLLVMScalarTypeForStructReturn(tree_node *type, unsigned *Offset) {
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
       Ty->getContext();
 #else
-      getGlobalContext();
+      llvm::getGlobalContext();
 #endif
   if (Size == 0)
     return llvm::Type::getVoidTy(Context);
