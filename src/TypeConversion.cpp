@@ -1662,9 +1662,6 @@ template <> struct GraphTraits<tree> {
 }
 
 Type *ConvertType(tree type) {
-#ifdef DRAGONEGG_DEBUG
-  printf("DEBUG: %s, line %d: %s\n", __FILE__, __LINE__, __func__);
-#endif
   LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
       TheModule->getContext();

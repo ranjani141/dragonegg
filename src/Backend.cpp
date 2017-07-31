@@ -1992,6 +1992,9 @@ static void emit_current_function() {
 /// once for each function in the compilation unit if GCC optimizations are
 /// enabled.
 static unsigned int rtl_emit_function(void) {
+#ifdef DRAGONEGG_DEBUG
+  printf("DEBUG: %s, line %d: %s\n", __FILE__, __LINE__, __func__);
+#endif
   if (!errorcount && !sorrycount) {
     InitializeBackend();
     // Convert the function.
@@ -2054,7 +2057,7 @@ public:
   pass_rtl_emit_function(gcc::context *ctxt)
       : rtl_opt_pass(pass_data_rtl_emit_function, ctxt) {}
 
-  virtual unsigned int execute(function *) { return rtl_emit_function(); }
+  unsigned int execute(function *) { return rtl_emit_function(); }
 
   opt_pass *clone() { return new pass_rtl_emit_function(m_ctxt); }
 };
