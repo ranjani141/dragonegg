@@ -384,14 +384,14 @@ static bool SizeOfGlobalMatchesDecl(GlobalValue *GV, tree decl) {
   uint64_t gcc_size = getInt64(DECL_SIZE(decl), true);
   const DataLayout *DL =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-      TheModule->getDataLayout();
+      TheTarget->createDataLayout();
 #else
       TheTarget->getSubtargetImpl()->getDataLayout();
 #endif
   unsigned Align = 8 * DL->getABITypeAlignment(Ty);
   return
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-       TheModule->getDataLayout()->getTypeAllocSizeInBits(Ty)
+       TheTarget->createDataLayout()->getTypeAllocSizeInBits(Ty)
 #else
        TheTarget->getSubtargetImpl()->getDataLayout()->getTypeAllocSizeInBits(Ty)
 #endif
@@ -550,6 +550,9 @@ static void setNoFramePointerElim(bool NoFramePointerElim) {
 static void CreateTargetMachine(const std::string &TargetTriple) {
   // Create the module itself.
   StringRef ModuleID = main_input_filename ? main_input_filename : "";
+#ifdef DRAGONEGG_DEBUG
+  printf("DEBUG: %s, line %d: %s: %s\n", __FILE__, __LINE__, __func__, ModuleID.data());
+#endif
   TheModule = new Module(ModuleID, TheContext);
 
   // FIXME: Figure out how to select the target and pass down subtarget info.
@@ -660,7 +663,7 @@ static void CreateTargetMachine(const std::string &TargetTriple) {
                                        RelocModel, CMModel, CodeGenOptLevel());
 
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-  assert(TheModule->getDataLayout()->isBigEndian() == BYTES_BIG_ENDIAN);
+  assert(TheTarget->createDataLayout()->isBigEndian() == BYTES_BIG_ENDIAN);
 #else
   assert(TheTarget->getSubtargetImpl()->getDataLayout()->isBigEndian() == BYTES_BIG_ENDIAN);
 #endif
@@ -709,12 +712,20 @@ static void CreateModule(const std::string &TargetTriple) {
   TheModule->setTargetTriple(TargetTriple);
   // https://reviews.llvm.org/D11103
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-  TheModule->setDataLayout(TheModule->getDataLayout());
+#ifdef DRAGONEGG_DEBUG
+  printf("DEBUG: %s, line %d: %s: %s\n", __FILE__, __LINE__, __func__,
+          TheTarget->createDataLayout().getStringRepresentation().c_str());
+#endif
+  TheModule->setDataLayout(TheTarget->createDataLayout().getStringRepresentation());
 #elif LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
   TheModule->setDataLayout(TheTarget->getSubtargetImpl()
                                ->getDataLayout()
                                ->getStringRepresentation());
 #else
+#ifdef DRAGONEGG_DEBUG
+  printf("DEBUG: %s, line %d: %s: %s\n", __FILE__, __LINE__, __func__,
+          TheTarget->getDataLayout()->getStringRepresentation().c_str());
+#endif
   TheModule->setDataLayout(
       TheTarget->getDataLayout()->getStringRepresentation());
 #endif
@@ -773,13 +784,16 @@ static void InitializeBackend(void) {
 
   // Create the target machine to generate code for.
   const std::string TargetTriple = ComputeTargetTriple();
+#ifdef DRAGONEGG_DEBUG
+  printf("DEBUG: %s, line %d: %s: %s\n", __FILE__, __LINE__, __func__, TargetTriple.c_str());
+#endif
   CreateTargetMachine(TargetTriple);
 
   // Create a module to hold the generated LLVM IR.
   CreateModule(TargetTriple);
 
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-  TheFolder = new TargetFolder(TheModule->getDataLayout());
+  TheFolder = new TargetFolder(TheTarget->createDataLayout());
 #elif LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
   TheFolder = new TargetFolder(TheTarget->getSubtargetImpl()->getDataLayout());
 #else
@@ -2068,6 +2082,9 @@ public:
 
 /// emit_file_scope_asms - Output any file-scope assembly.
 static void emit_file_scope_asms() {
+#ifdef DRAGONEGG_DEBUG
+  printf("DEBUG: %s, line %d: %s\n", __FILE__, __LINE__, __func__);
+#endif
   for (struct asm_node *anode = asm_nodes; anode; anode = anode->next) {
     tree string = anode->asm_str;
     if (isa<ADDR_EXPR>(string))
