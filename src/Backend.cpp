@@ -2124,6 +2124,9 @@ INSTANTIATE_VECTOR(alias_pair);
 /// llvm_emit_globals - Output GCC global variables, aliases and asm's to the
 /// LLVM IR.
 static void llvm_emit_globals(void * /*gcc_data*/, void * /*user_data*/) {
+#ifdef DRAGONEGG_DEBUG
+  printf("DEBUG: %s, line %d: %s\n", __FILE__, __LINE__, __func__);
+#endif
   if (errorcount || sorrycount)
     return; // Do not process broken code.
 
@@ -2765,12 +2768,13 @@ int __attribute__((visibility("default"))) plugin_init(
   // Perform late initialization just before processing the compilation unit.
   register_callback(plugin_name, PLUGIN_START_UNIT, llvm_start_unit, NULL);
 
+#ifdef DRAGONEGG_DEBUG
+  printf("DEBUG: %s, line %d: %s: %s\n", __FILE__, __LINE__, __func__,
+          EnableGCCOptimizations ? "Enable all gcc optimization passes." :
+          "Turn off all gcc optimization passes.");
+#endif
   // Turn off all gcc optimization passes.
   if (!EnableGCCOptimizations) {
-#ifdef DRAGONEGG_DEBUG
-    printf("DEBUG: %s, line %d: %s: Turn off all gcc optimization passes.\n",
-            __FILE__, __LINE__, __func__);
-#endif
 // TODO: figure out a good way of turning off ipa optimization passes.
 // Could just set optimize to zero (after taking a copy), but this would
 // also impact front-end optimizations.
