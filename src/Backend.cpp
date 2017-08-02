@@ -1887,6 +1887,9 @@ int plugin_is_GPL_compatible __attribute__((visibility("default")));
 /// NOTE: called even when only doing syntax checking, so do not initialize the
 /// module etc here.
 static void llvm_start_unit(void */*gcc_data*/, void */*user_data*/) {
+#ifdef DRAGONEGG_DEBUG
+  printf("DEBUG: %s, line %d: %s\n", __FILE__, __LINE__, __func__);
+#endif
   if (!quiet_flag)
     errs() << "Starting compilation unit\n";
 
@@ -2207,6 +2210,9 @@ static void InlineAsmDiagnosticHandler(const SMDiagnostic &D, void */*Data*/,
 /// llvm_finish_unit - Finish the .s file.  This is called by GCC once the
 /// compilation unit has been completely processed.
 static void llvm_finish_unit(void */*gcc_data*/, void */*user_data*/) {
+#ifdef DRAGONEGG_DEBUG
+  printf("DEBUG: %s, line %d: %s\n", __FILE__, __LINE__, __func__);
+#endif
   if (errorcount || sorrycount)
     return; // Do not process broken code.
 
@@ -2390,6 +2396,9 @@ public:
 /// execute_correct_state - Correct the cgraph state to ensure that newly
 /// inserted functions are processed before being converted to LLVM IR.
 static unsigned int execute_correct_state(void) {
+#ifdef DRAGONEGG_DEBUG
+  printf("DEBUG: %s, line %d: %s\n", __FILE__, __LINE__, __func__);
+#endif
 #if (GCC_MAJOR > 4)
   if (symtab->state < IPA_SSA)
     symtab->state = IPA_SSA;
@@ -2641,9 +2650,6 @@ int __attribute__((visibility("default"))) plugin_init(
         version
 #endif
     ) {
-#ifdef DRAGONEGG_DEBUG
-  printf("DEBUG: %s, line %d: %s\n", __FILE__, __LINE__, __func__);
-#endif
   const char *plugin_name = plugin_info->base_name;
   struct register_pass_info pass_info;
 
@@ -3150,10 +3156,6 @@ int __attribute__((visibility("default"))) plugin_init(
 
   // Run shutdown code when GCC exits.
   register_callback(plugin_name, PLUGIN_FINISH, llvm_finish, NULL);
-
-#ifdef DRAGONEGG_DEBUG
-  printf("DEBUG: %s, line %d: %s\n", __FILE__, __LINE__, __func__);
-#endif
 
   return 0;
 }
