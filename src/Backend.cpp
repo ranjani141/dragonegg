@@ -683,6 +683,9 @@ static void output_ident(const char *ident_str) {
   Directive += " LLVM: ";
   Directive += LLVM_VERSION_STRING;
   Directive += "\"";
+#ifdef DRAGONEGG_DEBUG
+  printf("DEBUG: %s, line %d: %s: %s\n", __FILE__, __LINE__, __func__, Directive.c_str());
+#endif
   TheModule->setModuleInlineAsm(Directive);
 }
 
@@ -870,7 +873,7 @@ static void createPerFunctionOptimizationPasses() {
 #endif
   // https://reviews.llvm.org/D7992
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-  //
+  // Migrate
 #elif LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
   PerFunctionPasses->add(new DataLayoutPass());
 #else
@@ -1192,6 +1195,9 @@ static GlobalValue::LinkageTypes GetLinkageForAlias(tree decl) {
 
 /// emit_alias - Given decl and target emit alias to target.
 static void emit_alias(tree decl, tree target) {
+#ifdef DRAGONEGG_DEBUG
+  printf("DEBUG: %s, line %d: %s\n", __FILE__, __LINE__, __func__);
+#endif
   if (errorcount || sorrycount)
     return; // Do not process broken code.
 
@@ -1311,6 +1317,9 @@ static void emit_varpool_aliases(struct varpool_node *node) {
 /// emit_global - Emit the specified VAR_DECL or aggregate CONST_DECL to LLVM as
 /// a global variable.  This function implements the end of assemble_variable.
 static void emit_global(tree decl) {
+#ifdef DRAGONEGG_DEBUG
+  printf("DEBUG: %s, line %d: %s\n", __FILE__, __LINE__, __func__);
+#endif
   // FIXME: DECL_PRESERVE_P indicates the var is marked with attribute 'used'.
 
   // Global register variables don't turn into LLVM GlobalVariables.
@@ -1795,6 +1804,9 @@ Value *make_decl_llvm(tree decl) {
 /// make_definition_llvm - Ensures that the body or initial value of the given
 /// GCC global will be output, and returns a declaration for it.
 Value *make_definition_llvm(tree decl) {
+#ifdef DRAGONEGG_DEBUG
+  printf("DEBUG: %s, line %d: %s\n", __FILE__, __LINE__, __func__);
+#endif
   // Only need to do something special for global variables.
   if (!isa<CONST_DECL>(decl) && !isa<VAR_DECL>(decl))
     return DECL_LLVM(decl);
@@ -2107,6 +2119,9 @@ static tree get_alias_symbol(tree decl) {
 /// emit_cgraph_weakrefs - Output any cgraph weak references to external
 /// declarations.
 static void emit_cgraph_weakrefs() {
+#ifdef DRAGONEGG_DEBUG
+  printf("DEBUG: %s, line %d: %s\n", __FILE__, __LINE__, __func__);
+#endif
   struct cgraph_node *node;
   FOR_EACH_FUNCTION(node)
     if (node->alias && DECL_EXTERNAL(cgraph_symbol(node)->decl) &&
@@ -2119,6 +2134,9 @@ static void emit_cgraph_weakrefs() {
 /// emit_varpool_weakrefs - Output any varpool weak references to external
 /// declarations.
 static void emit_varpool_weakrefs() {
+#ifdef DRAGONEGG_DEBUG
+  printf("DEBUG: %s, line %d: %s\n", __FILE__, __LINE__, __func__);
+#endif
   struct varpool_node *vnode;
   FOR_EACH_VARIABLE(vnode)
     if (vnode->alias && DECL_EXTERNAL(varpool_symbol(vnode)->decl) &&
@@ -2172,7 +2190,7 @@ static void llvm_emit_globals(void * /*gcc_data*/, void * /*user_data*/) {
         (
 #if GCC_VERSION_CODE > GCC_VERSION(4, 5)
 #if (GCC_MAJOR > 4)
-            !vnode->can_remove_if_no_refs_p()
+            !vnode->can_remove_if_no_refs_p() && !vnode->in_other_partition
 #else
             !varpool_can_remove_if_no_refs(vnode)
 #endif
@@ -2181,7 +2199,10 @@ static void llvm_emit_globals(void * /*gcc_data*/, void * /*user_data*/) {
             (!DECL_COMDAT(decl) &&
              (!DECL_ARTIFICIAL(decl) || vnode->externally_visible))
 #endif
-            ))
+            )) {
+#ifdef DRAGONEGG_DEBUG
+      printf("DEBUG: %s, line %d: %s: vnode\n", __FILE__, __LINE__, __func__);
+#endif
       // TODO: Remove the check on the following lines.  It only exists to avoid
       // outputting block addresses when not compiling the function containing
       // the block.  We need to support outputting block addresses at odd times
@@ -2190,6 +2211,7 @@ static void llvm_emit_globals(void * /*gcc_data*/, void * /*user_data*/) {
           (TREE_PUBLIC(decl) || DECL_PRESERVE_P(decl) ||
            TREE_THIS_VOLATILE(decl)))
         emit_global(decl);
+    }
   }
 
 #if GCC_VERSION_CODE > GCC_VERSION(4, 6)
