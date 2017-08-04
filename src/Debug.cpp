@@ -986,7 +986,13 @@ MigDIType DebugInfo::createStructType(tree type) {
     EltTys.push_back(DTy);
   }
 
-  for (tree Member = TYPE_METHODS(type); Member; Member = TREE_CHAIN(Member)) {
+  for (tree Member =
+#if (GCC_MAJOR > 7)
+          TYPE_FIELDS(type);
+#else
+          TYPE_METHODS(type);
+#endif
+          Member; Member = TREE_CHAIN(Member)) {
 
     if (DECL_ABSTRACT_ORIGIN(Member))
       continue;

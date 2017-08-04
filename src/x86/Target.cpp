@@ -78,6 +78,10 @@ extern void debug_gimple_stmt(union gimple_statement_d *);
 // One day we will do parameter marshalling right: by using CUMULATIVE_ARGS.
 // While waiting for that happy day, just include a chunk of i386.c.
 #if (GCC_MAJOR > 4)
+#if (GCC_MAJOR > 7)
+#include "memmodel.h"
+#include "tree-vrp.h"
+#endif
 #include "ABIHack6.inc"
 #else
 #include "ABIHack.inc"

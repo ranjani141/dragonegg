@@ -108,10 +108,10 @@ extern "C" {
 #endif
 #include "target.h" // For targetm.
 #include "toplev.h"
-#if (GCC_MAJOR < 5)
-#include "tree-flow.h"
-#else
+#if (GCC_MAJOR > 4)
 #include "tree-cfg.h"
+#else
+#include "tree-flow.h"
 #endif
 #include "tree-pass.h"
 #include "version.h"
@@ -817,7 +817,12 @@ static void InitializeBackend(void) {
   PassBuilder.DisableUnrollLoops = !flag_unroll_loops;
 //  Don't turn on the SLP vectorizer by default at -O3 for the moment.
 //  PassBuilder.SLPVectorize = flag_tree_slp_vectorize;
-  PassBuilder.LoopVectorize = flag_tree_vectorize;
+  PassBuilder.LoopVectorize =
+#if (GCC_MAJOR > 7)
+      flag_tree_loop_vectorize;
+#else
+      flag_tree_vectorize;
+#endif
 
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
   PassBuilder.LibraryInfo =
@@ -2097,7 +2102,7 @@ public:
 #ifdef DRAGONEGG_DEBUG
     printf("DEBUG: %s, line %d: %s\n", __FILE__, __LINE__, __PRETTY_FUNCTION__);
 #endif
-    return this;/*new pass_rtl_emit_function(m_ctxt);*/
+    return this;
   }
 
   bool gate(function *) final override {

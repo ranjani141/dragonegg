@@ -1481,7 +1481,12 @@ static Constant *ConvertPOINTER_PLUS_EXPR(tree exp, TargetFolder &Folder) {
 
   // Convert the pointer into an i8* and add the offset to it.
   Ptr = Folder.CreateBitCast(Ptr, GetUnitPointerType(Context));
-  Constant *Result = POINTER_TYPE_OVERFLOW_UNDEFINED
+  Constant *Result =
+#if (GCC_MAJOR > 7)
+      true
+#else
+      POINTER_TYPE_OVERFLOW_UNDEFINED
+#endif
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
                      ? Folder.CreateInBoundsGetElementPtr(nullptr, Ptr, Idx)
                      : Folder.CreateGetElementPtr(nullptr, Ptr, Idx);
@@ -1667,7 +1672,12 @@ static Constant *AddressOfARRAY_REF(tree exp, TargetFolder &Folder) {
   Type *EltTy = ConvertType(main_type(main_type(array)));
   ArrayAddr = Folder.CreateBitCast(ArrayAddr, EltTy->getPointerTo());
 
-  return POINTER_TYPE_OVERFLOW_UNDEFINED
+  return
+#if (GCC_MAJOR > 7)
+      true
+#else
+      POINTER_TYPE_OVERFLOW_UNDEFINED
+#endif
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
          ? Folder.CreateInBoundsGetElementPtr(nullptr, ArrayAddr, IndexVal)
          : Folder.CreateGetElementPtr(nullptr, ArrayAddr, IndexVal);

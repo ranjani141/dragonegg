@@ -65,6 +65,9 @@ extern "C" {
 #include "gimple-pretty-print.h"
 #include "varasm.h"
 #include "rtl.h"
+#if (GCC_MAJOR > 7)
+#include "profile-count.h"
+#endif
 #include "expr.h"
 #include "explow.h"
 #define MAX_RECOG_OPERANDS 101
@@ -78,9 +81,7 @@ extern "C" {
 #include "target.h" // For targetm.
 #include "tm_p.h"
 #include "toplev.h"
-#if (GCC_MAJOR < 5)
-#include "tree-flow.h"
-#else
+#if (GCC_MAJOR > 4)
 #include "builtins.h"
 #include "stor-layout.h"
 #include "print-tree.h"
@@ -91,9 +92,14 @@ extern "C" {
 #include "tree-cfg.h"
 #include "gimple-iterator.h"
 #include "tree-eh.h"
+#if (GCC_MAJOR > 7)
+#include "memmodel.h"
+#endif
 #include "emit-rtl.h"
 #include "fold-const.h"
 #include "stmt.h"
+#else
+#include "tree-flow.h"
 #endif
 #include "tree-pass.h"
 
@@ -6772,7 +6778,12 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
         Type *EltTy = ConvertType(ElementType);
         ArrayAddr = Builder.CreateBitCast(ArrayAddr, EltTy->getPointerTo());
         StringRef GEPName = flag_verbose_asm ? "ar" : "";
-        Value *Ptr = POINTER_TYPE_OVERFLOW_UNDEFINED
+        Value *Ptr =
+#if (GCC_MAJOR > 7)
+            true
+#else
+            POINTER_TYPE_OVERFLOW_UNDEFINED
+#endif
                      ? Builder.CreateInBoundsGEP(ArrayAddr, IndexVal, GEPName)
                      : Builder.CreateGEP(ArrayAddr, IndexVal, GEPName);
         unsigned Alignment =
@@ -6796,7 +6807,12 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
         ArrayAddr =
             Builder.CreateBitCast(ArrayAddr, Type::getInt8PtrTy(Context));
         StringRef GEPName = flag_verbose_asm ? "va" : "";
-        ArrayAddr = POINTER_TYPE_OVERFLOW_UNDEFINED
+        ArrayAddr =
+#if (GCC_MAJOR > 7)
+            true
+#else
+            POINTER_TYPE_OVERFLOW_UNDEFINED
+#endif
                     ? Builder.CreateInBoundsGEP(ArrayAddr, IndexVal, GEPName)
                     : Builder.CreateGEP(ArrayAddr, IndexVal, GEPName);
         return LValue(ArrayAddr, 1);
@@ -6821,7 +6837,12 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
       IndexVal = Builder.CreateMul(IndexVal, ScaleFactor);
       unsigned Alignment = MinAlign(ArrayAlign, TYPE_ALIGN(ElementType) / 8);
       StringRef GEPName = flag_verbose_asm ? "ra" : "";
-      Value *Ptr = POINTER_TYPE_OVERFLOW_UNDEFINED
+      Value *Ptr =
+#if (GCC_MAJOR > 7)
+          true
+#else
+          POINTER_TYPE_OVERFLOW_UNDEFINED
+#endif
                    ? Builder.CreateInBoundsGEP(ArrayAddr, IndexVal, GEPName)
                    : Builder.CreateGEP(ArrayAddr, IndexVal, GEPName);
       return LValue(
@@ -7176,7 +7197,12 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
         // Advance the base pointer by the given number of units.
         Addr = Builder.CreateBitCast(Addr, GetUnitPointerType(Context));
         StringRef GEPName = flag_verbose_asm ? "" : "tmrf";
-        Addr = POINTER_TYPE_OVERFLOW_UNDEFINED
+        Addr =
+#if (GCC_MAJOR > 7)
+            true
+#else
+            POINTER_TYPE_OVERFLOW_UNDEFINED
+#endif
                ? Builder.CreateInBoundsGEP(Addr, Delta, GEPName)
                : Builder.CreateGEP(Addr, Delta, GEPName);
       }
@@ -8383,7 +8409,12 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
       // Convert the pointer into an i8* and add the offset to it.
       Ptr = Builder.CreateBitCast(Ptr, GetUnitPointerType(Context));
       StringRef GEPName = flag_verbose_asm ? "pp" : "";
-      return POINTER_TYPE_OVERFLOW_UNDEFINED
+      return
+#if (GCC_MAJOR > 7)
+          true
+#else
+          POINTER_TYPE_OVERFLOW_UNDEFINED
+#endif
              ? Builder.CreateInBoundsGEP(Ptr, Idx, GEPName)
              : Builder.CreateGEP(Ptr, Idx, GEPName);
     }
