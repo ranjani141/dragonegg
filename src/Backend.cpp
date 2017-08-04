@@ -2093,17 +2093,23 @@ public:
 #endif
   }
 
-  opt_pass *clone() {
+  opt_pass *clone() final override {
 #ifdef DRAGONEGG_DEBUG
     printf("DEBUG: %s, line %d: %s\n", __FILE__, __LINE__, __PRETTY_FUNCTION__);
 #endif
     return this;/*new pass_rtl_emit_function(m_ctxt);*/
   }
 
-  unsigned int execute(function *fun) {
+  bool gate(function *) final override {
 #ifdef DRAGONEGG_DEBUG
-    printf("DEBUG: %s, line %d: %s: %d\n", __FILE__, __LINE__,
-            __PRETTY_FUNCTION__, fun);
+    printf("DEBUG: %s, line %d: %s\n", __FILE__, __LINE__, __PRETTY_FUNCTION__);
+#endif
+    return true;
+  }
+
+  unsigned int execute(function *) final override {
+#ifdef DRAGONEGG_DEBUG
+    printf("DEBUG: %s, line %d: %s\n", __FILE__, __LINE__, __PRETTY_FUNCTION__);
 #endif
     return rtl_emit_function();
   }
@@ -2448,8 +2454,8 @@ class pass_gimple_null : public gimple_opt_pass {
 public:
   pass_gimple_null(gcc::context *ctxt)
       : gimple_opt_pass(pass_data_gimple_null, ctxt) {}
-  opt_pass *clone() { return this;/*new pass_gimple_null(m_ctxt);*/ }
-  virtual bool gate(function *) { return gate_null(); }
+  opt_pass *clone() final override { return this;/*new pass_gimple_null(m_ctxt);*/ }
+  bool gate(function *) final override { return gate_null(); }
 };
 #endif
 
@@ -2510,9 +2516,9 @@ public:
   pass_gimple_correct_state(gcc::context *ctxt)
       : gimple_opt_pass(pass_data_gimple_correct_state, ctxt) {}
 
-  virtual bool gate(function *) { return gate_correct_state(); }
+  bool gate(function *) final override { return gate_correct_state(); }
 
-  virtual unsigned int execute(function *) { return execute_correct_state(); }
+  unsigned int execute(function *) final override { return execute_correct_state(); }
 };
 #endif
 
@@ -2576,8 +2582,8 @@ public:
                        NULL, /* function_transform */
                        NULL) /* variable_transform */
     {}
-  opt_pass *clone() { return this;/*new pass_ipa_null(m_ctxt);*/ }
-  virtual bool gate(function *) { return gate_null(); }
+  opt_pass *clone() final override { return this;/*new pass_ipa_null(m_ctxt);*/ }
+  bool gate(function *) final override { return gate_null(); }
 };
 #endif
 
@@ -2616,8 +2622,8 @@ class pass_rtl_null : public rtl_opt_pass {
 public:
   pass_rtl_null(gcc::context *ctxt) : rtl_opt_pass(pass_data_rtl_null, ctxt) {}
 
-  opt_pass *clone() { return this;/*new pass_rtl_null(m_ctxt);*/ }
-  virtual bool gate(function *) { return gate_null(); }
+  opt_pass *clone() final override { return this;/*new pass_rtl_null(m_ctxt);*/ }
+  bool gate(function *) final override { return gate_null(); }
 };
 #endif
 
@@ -2657,8 +2663,8 @@ class pass_simple_ipa_null : public simple_ipa_opt_pass {
 public:
   pass_simple_ipa_null(gcc::context *ctxt)
       : simple_ipa_opt_pass(pass_data_simple_ipa_null, ctxt) {}
-  opt_pass * clone () { return this;/*new pass_simple_ipa_null(m_ctxt);*/ }
-  virtual bool gate(function *) { return gate_null(); }
+  opt_pass *clone() final override { return this;/*new pass_simple_ipa_null(m_ctxt);*/ }
+  bool gate(function *) final override { return gate_null(); }
 };
 #endif
 
