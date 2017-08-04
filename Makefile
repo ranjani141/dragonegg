@@ -43,6 +43,7 @@ COMMON_FLAGS+=-fvisibility=hidden
 endif
 CFLAGS+=$(COMMON_FLAGS) $(shell $(LLVM_CONFIG) --cflags)
 CXXFLAGS+=$(COMMON_FLAGS) $(shell $(LLVM_CONFIG) --cxxflags)
+CXXFLAGS=${CXXFLAGS//-Wcovered-switch-default/-Wno-switch-default}
 
 ifeq ($(shell uname),Darwin)
 LOADABLE_MODULE_OPTIONS=-bundle -undefined dynamic_lookup
