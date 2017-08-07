@@ -40,6 +40,9 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Target/TargetLowering.h"
 #include "llvm/Target/TargetSubtargetInfo.h"
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 9)
+#include "llvm/ADT/SmallSet.h"
+#endif
 
 // System headers
 #include <gmp.h>
@@ -1351,7 +1354,11 @@ Value *TreeToLLVM::DefineSSAName(tree reg, Value *Val) {
       // Replace the placeholder with the value everywhere.  This also updates
       // the map entry, because it is a TrackingVH.
       ExistingValue->replaceAllUsesWith(Val);
+#if LLVM_VERSION_CODE > LLVM_VERSION(4, 0)
+      ExistingValue->deleteValue();
+#else
       delete ExistingValue;
+#endif
     }
     return Val;
   }
@@ -1639,7 +1646,11 @@ Function *TreeToLLVM::FinishFunctionBody() {
       // whether we defined every SSA name.
       if (errorcount || sorrycount) {
         NameDef->replaceAllUsesWith(UndefValue::get(NameDef->getType()));
+#if LLVM_VERSION_CODE > LLVM_VERSION(4, 0)
+        NameDef->deleteValue();
+#else
         delete NameDef;
+#endif
       } else {
         debug_tree(I->first);
         llvm_unreachable("SSA name never defined!");
@@ -2193,7 +2204,11 @@ AllocaInst *TreeToLLVM::CreateTemporary(Type *Ty, unsigned align) {
     Fn->begin()->getInstList()
         .insert(Fn->begin()->begin(), AllocaInsertionPoint);
   }
-  return new AllocaInst(Ty, 0, align, "", AllocaInsertionPoint);
+  return new AllocaInst(Ty,
+#if LLVM_VERSION_CODE > LLVM_VERSION(4, 0)
+                        0, /* AddrSpace */
+#endif
+                        0, align, "", AllocaInsertionPoint);
 }
 
 /// CreateTempLoc - Like CreateTemporary, but returns a MemRef.
@@ -2901,7 +2916,11 @@ void TreeToLLVM::EmitLandingPads() {
   // handling region has its own landing pad, which is only reachable via the
   // unwind edges of the region's invokes.
   Type *UnwindDataTy =
-      StructType::get(Builder.getInt8PtrTy(), Builder.getInt32Ty(), NULL);
+      StructType::get(Builder.getInt8PtrTy(), Builder.getInt32Ty()
+#if LLVM_VERSION_CODE < LLVM_VERSION(5, 0)
+              , NULL
+#endif
+              );
   for (unsigned LPadNo = 1; LPadNo < NormalInvokes.size(); ++LPadNo) {
     // Get the list of invokes for this GCC landing pad.
     SmallVector<InvokeInst *, 8> &InvokesForPad = NormalInvokes[LPadNo];
@@ -3073,7 +3092,11 @@ void TreeToLLVM::EmitFailureBlocks() {
       // Generate a landingpad instruction with an empty (i.e. catch-all) filter
       // clause.
       Type *UnwindDataTy =
-          StructType::get(Builder.getInt8PtrTy(), Builder.getInt32Ty(), NULL);
+          StructType::get(Builder.getInt8PtrTy(), Builder.getInt32Ty()
+#if LLVM_VERSION_CODE < LLVM_VERSION(5, 0)
+                  , NULL
+#endif
+                  );
       tree personality = DECL_FUNCTION_PERSONALITY(FnDecl);
       assert(personality && "No-throw region but no personality function!");
       // https://reviews.llvm.org/D10429
@@ -3737,7 +3760,12 @@ Value *TreeToLLVM::EmitCallOf(Value *Callee, GimpleTy *stmt,
       // attributes to all scalars of the aggregate.
       for (unsigned j = OldSize + 1; j <= CallOperands.size(); ++j)
         PAL = PAL.addAttributes(Context, j,
-                                MigAttributeSet::get(Context, j, AttrBuilder));
+#if LLVM_VERSION_CODE > LLVM_VERSION(4, 0)
+                                AttrBuilder
+#else
+                                MigAttributeSet::get(Context, j, AttrBuilder)
+#endif
+                                );
     }
 
     Client.clear();
@@ -6657,7 +6685,11 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
     Value *TreeToLLVM::CreateComplex(Value * Real, Value * Imag) {
       assert(Real->getType() == Imag->getType() && "Component type mismatch!");
       Type *EltTy = Real->getType();
-      Value *Result = UndefValue::get(StructType::get(EltTy, EltTy, NULL));
+      Value *Result = UndefValue::get(StructType::get(EltTy, EltTy
+#if LLVM_VERSION_CODE < LLVM_VERSION(5, 0)
+                  , NULL
+#endif
+                  ));
       Result = Builder.CreateInsertValue(Result, Real, 0);
       Result = Builder.CreateInsertValue(Result, Imag, 1);
       return Result;
@@ -8713,7 +8745,11 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
       unsigned Align = DL.getABITypeAlignment(EltTy);
       // The temporary is a struct containing the pair of input vectors.
       Type *TmpTy = StructType::get(ConvertType(TREE_TYPE(op0)),
-                                    ConvertType(TREE_TYPE(op1)), NULL);
+                                    ConvertType(TREE_TYPE(op1))
+#if LLVM_VERSION_CODE < LLVM_VERSION(5, 0)
+                                    , NULL
+#endif
+                                    );
       AllocaInst *Tmp = CreateTemporary(TmpTy, Align);
       // Store the first vector to the first element of the pair.
       Value *Tmp0 =
@@ -9805,7 +9841,11 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
       Value *ExcPtr = Builder.CreateLoad(getExceptionPtr(src_rgn->index));
       Value *Filter = Builder.CreateLoad(getExceptionFilter(src_rgn->index));
       Type *UnwindDataTy =
-          StructType::get(Builder.getInt8PtrTy(), Builder.getInt32Ty(), NULL);
+          StructType::get(Builder.getInt8PtrTy(), Builder.getInt32Ty()
+#if LLVM_VERSION_CODE < LLVM_VERSION(5, 0)            
+                  , NULL
+#endif
+                  );
       Value *UnwindData = UndefValue::get(UnwindDataTy);
       UnwindData = Builder.CreateInsertValue(UnwindData, ExcPtr, 0, "exc_ptr");
       UnwindData = Builder.CreateInsertValue(UnwindData, Filter, 1, "filter");

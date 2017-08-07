@@ -362,7 +362,15 @@ MigDINamespace DebugInfo::getOrCreateNameSpace(tree Node, MigDIScope Context) {
 
   expanded_location Loc = GetNodeLocation(Node, false);
   MigDINamespace DNS = Builder.createNameSpace(
-      Context, GetNodeName(Node), getOrCreateFile(Loc.file), Loc.line);
+      Context, GetNodeName(Node)
+#if LLVM_VERSION_CODE < LLVM_VERSION(5, 0)
+      , getOrCreateFile(Loc.file),
+      Loc.line
+#endif
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 9)
+      , true
+#endif
+      );
 
   NameSpaceCache[Node] = WeakVH(
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
@@ -518,13 +526,21 @@ void DebugInfo::EmitGlobalVariable(GlobalVariable *GV, tree decl) {
   if (DECL_CONTEXT(decl))
     if (!isa<FUNCTION_DECL>(DECL_CONTEXT(decl)))
       LinkageName = GV->getName();
-#if LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 9)
+  Builder.createGlobalVariableExpression(
+#elif LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
   Builder.createGlobalVariable(
 #else
   Builder.createStaticVariable(
 #endif
       findRegion(DECL_CONTEXT(decl)), DispName, LinkageName,
-      getOrCreateFile(Loc.file), Loc.line, TyD, GV->hasInternalLinkage(), GV);
+      getOrCreateFile(Loc.file), Loc.line, TyD, GV->hasInternalLinkage(),
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 9)
+      nullptr
+#else
+      GV
+#endif
+  );
 }
 
 /// createBasicType - Create BasicType.
@@ -564,7 +580,11 @@ MigDIType DebugInfo::createBasicType(tree type) {
     llvm_unreachable("Basic type case missing");
   }
 
-  return Builder.createBasicType(TypeName, Size, Align, Encoding);
+  return Builder.createBasicType(TypeName, Size,
+#if LLVM_VERSION_CODE < LLVM_VERSION(4, 0)
+                                 Align,
+#endif
+                                 Encoding);
 }
 
 /// isArtificialArgumentType - Return true if arg_type represents artificial,
@@ -1305,8 +1325,13 @@ void DebugInfo::getOrCreateCompileUnit(const char *FullPath, bool isMain) {
   unsigned ObjcRunTimeVer = 0;
   //  if (flag_objc_abi != 0 && flag_objc_abi != -1)
   //    ObjcRunTimeVer = flag_objc_abi;
-  Builder.createCompileUnit(LangTag, FileName, Directory, version_string,
-                            optimize, Flags, ObjcRunTimeVer);
+  Builder.createCompileUnit(LangTag,
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 9)
+                            Builder.createFile(FileName, Directory),
+#else
+                            FileName, Directory,
+#endif
+                            version_string, optimize, Flags, ObjcRunTimeVer);
 }
 
 /// getOrCreateFile - Get DIFile descriptor.
@@ -1339,11 +1364,19 @@ DIDerivedType
 DebugInfo::CreateDerivedType(unsigned Tag, MigDIScope Context, StringRef Name,
     MigDIFile F, unsigned LineNumber, uint64_t SizeInBits, uint64_t AlignInBits,
     uint64_t OffsetInBits, unsigned Flags, MigDIType DerivedFrom) {
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 9)
+  DINode::DIFlags MigFlags = DINode::FlagZero;
+#else
+  unsigned MigFlags = Flags;
+#endif
   switch (Tag) {
   case dwarf::DW_TAG_typedef:
     return Builder.createTypedef(DerivedFrom, Name, F, LineNumber, Context);
   case dwarf::DW_TAG_pointer_type:
     return Builder.createPointerType(DerivedFrom, SizeInBits, AlignInBits,
+#if LLVM_VERSION_CODE > LLVM_VERSION(4, 0)
+                                     None,
+#endif
                                      Name);
   case dwarf::DW_TAG_reference_type:
   case dwarf::DW_TAG_rvalue_reference_type:
@@ -1354,7 +1387,8 @@ DebugInfo::CreateDerivedType(unsigned Tag, MigDIScope Context, StringRef Name,
     return Builder.createQualifiedType(Tag, DerivedFrom);
   case dwarf::DW_TAG_member:
     return Builder.createMemberType(Context, Name, F, LineNumber, SizeInBits,
-                                    AlignInBits, OffsetInBits, Flags,
+                                    AlignInBits, OffsetInBits,
+                                    MigFlags,
                                     DerivedFrom);
   case dwarf::DW_TAG_inheritance:
     return Builder.createInheritance(
@@ -1364,7 +1398,8 @@ DebugInfo::CreateDerivedType(unsigned Tag, MigDIScope Context, StringRef Name,
                                      DIType(Context),
 #endif
                                      DerivedFrom, OffsetInBits,
-                                     Flags);
+                                     MigFlags
+                                     );
   case dwarf::DW_TAG_friend:
   case dwarf::DW_TAG_ptr_to_member_type:
     break;
@@ -1378,13 +1413,20 @@ MigDICompositeType DebugInfo::CreateCompositeType(
     unsigned LineNumber, uint64_t SizeInBits, uint64_t AlignInBits,
     uint64_t OffsetInBits, unsigned Flags, MigDIType DerivedFrom,
     MigDINodeArray Elements, unsigned RuntimeLang, MDNode *ContainingType) {
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 9)
+  DINode::DIFlags MigFlags = DINode::FlagZero;
+#else
+  unsigned MigFlags = Flags;
+#endif
   switch (Tag) {
   case dwarf::DW_TAG_array_type:
     return Builder.createArrayType(SizeInBits, AlignInBits, DerivedFrom,
                                    Elements);
   case dwarf::DW_TAG_structure_type:
     return Builder.createStructType(Context, Name, F, LineNumber, SizeInBits,
-                                    AlignInBits, Flags, DerivedFrom, Elements,
+                                    AlignInBits,
+                                    MigFlags,
+                                    DerivedFrom, Elements,
                                     0,
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
                                     dyn_cast_or_null<DIType>(ContainingType)
@@ -1394,7 +1436,9 @@ MigDICompositeType DebugInfo::CreateCompositeType(
                                     );
   case dwarf::DW_TAG_union_type:
     return Builder.createUnionType(Context, Name, F, LineNumber, SizeInBits,
-                                   AlignInBits, Flags, Elements, RuntimeLang);
+                                   AlignInBits,
+                                   MigFlags,
+                                   Elements, RuntimeLang);
   case dwarf::DW_TAG_enumeration_type:
     return Builder.createEnumerationType(Context, Name, F, LineNumber,
                                          SizeInBits, AlignInBits, Elements,
@@ -1416,6 +1460,11 @@ MigDISubprogram DebugInfo::CreateSubprogram(
     bool isLocalToUnit, bool isDefinition, MigDIType ContainingType,
     unsigned VK, unsigned VIndex, unsigned Flags, bool isOptimized,
     Function *Fn) {
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 9)
+  DINode::DIFlags MigFlags = DINode::FlagZero;
+#else
+  unsigned MigFlags = Flags;
+#endif
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
   DISubroutineType *CTy = dyn_cast_or_null<DISubroutineType>(Ty);
 #else
@@ -1435,13 +1484,13 @@ MigDISubprogram DebugInfo::CreateSubprogram(
 #else
                                 DIType(),
 #endif
-                                Flags, isOptimized,
+                                MigFlags, isOptimized,
 #if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
                                 Fn,
 #endif
                                 NULL);
   return Builder.createFunction(Context, Name, LinkageName, F, LineNo, CTy,
-                                isLocalToUnit, isDefinition, LineNo, Flags,
+                                isLocalToUnit, isDefinition, LineNo, MigFlags,
                                 isOptimized,
 #if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
                                 Fn,

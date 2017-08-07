@@ -40,6 +40,8 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/FormattedStream.h"
 
+#include "dragonegg/TypeConversion.h"
+
 #if LLVM_VERSION_CODE >= LLVM_VERSION(3, 0)
 #  define LLVM_TYPE_Q
 #else
@@ -631,7 +633,7 @@ private:
   llvm::Value *EmitCondExpr(tree_node *exp);
 #endif
   llvm::Value *EmitCallOf(llvm::Value *Callee, GimpleTy *stmt,
-                          const MemRef *DestLoc, const llvm::AttributeSet &PAL);
+                          const MemRef *DestLoc, const MigAttributeSet &PAL);
   llvm::CallInst *EmitSimpleCall(llvm::StringRef CalleeName,
                                  tree_node *ret_type,
                                  /* arguments */ ...) LLVM_END_WITH_NULL;

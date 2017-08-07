@@ -41,6 +41,11 @@
 #error BITS_PER_UNIT must be a multiple of 8
 #endif
 
+#if LLVM_VERSION_MAJOR > 4
+using integerPart = uint64_t;
+const unsigned int integerPartWidth = 8 * static_cast<unsigned int>(sizeof(integerPart));
+#endif
+
 /// dragonegg_tree_code - Fake helper tree codes.
 enum dragonegg_tree_code {
   ACCESS_TYPE,          // A pointer or reference type.

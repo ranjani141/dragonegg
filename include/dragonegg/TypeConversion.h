@@ -39,7 +39,7 @@ class Type;
 }
 union tree_node;
 
-#if LLVM_VERSION_CODE > LLVM_VERSION(3, 9)
+#if LLVM_VERSION_CODE > LLVM_VERSION(4, 0)
 typedef llvm::AttributeList MigAttributeSet;
 #else
 typedef llvm::AttributeSet MigAttributeSet;

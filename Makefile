@@ -42,7 +42,10 @@ else
 COMMON_FLAGS+=-fvisibility=hidden
 endif
 CFLAGS+=$(COMMON_FLAGS) $(shell $(LLVM_CONFIG) --cflags)
-CXXFLAGS+=$(COMMON_FLAGS) $(shell $(LLVM_CONFIG) --cxxflags)
+LLVM_CXXFLAGS=$(shell $(LLVM_CONFIG) --cxxflags)
+LLVM_CXXFLAGS_Wcwd=$(subst -Wcovered-switch-default, -Wno-switch-default, $(LLVM_CXXFLAGS))
+LLVM_CXXFLAGS_Wsc=$(subst -Wstring-conversion, , $(LLVM_CXXFLAGS_Wcwd))
+CXXFLAGS+=$(COMMON_FLAGS) $(LLVM_CXXFLAGS_Wsc)
 
 ifeq ($(shell uname),Darwin)
 LOADABLE_MODULE_OPTIONS=-bundle -undefined dynamic_lookup
