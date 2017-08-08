@@ -475,7 +475,11 @@ Type *getRegType(tree type) {
 
   case COMPLEX_TYPE: {
     Type *EltTy = getRegType(TREE_TYPE(type));
-    return StructType::get(EltTy, EltTy, NULL);
+    return StructType::get(EltTy, EltTy
+#if LLVM_VERSION_CODE < LLVM_VERSION(5, 0)
+            , NULL
+#endif
+            );
   }
 
 #if GCC_VERSION_CODE > GCC_VERSION(4, 5)
@@ -554,7 +558,11 @@ static Type *ConvertArrayTypeRecursive(tree type) {
                        getDataLayout().getTypeAllocSizeInBits(Ty);
     if (PadBits) {
       Type *Padding = ArrayType::get(Type::getInt8Ty(Context), PadBits / 8);
-      Ty = StructType::get(Ty, Padding, NULL);
+      Ty = StructType::get(Ty, Padding
+#if LLVM_VERSION_CODE < LLVM_VERSION(5, 0)
+              , NULL
+#endif
+              );
     }
   }
 
@@ -1508,7 +1516,11 @@ static Type *ConvertTypeNonRecursive(tree type) {
 
   case COMPLEX_TYPE: {
     Ty = ConvertTypeNonRecursive(main_type(type));
-    Ty = StructType::get(Ty, Ty, NULL);
+    Ty = StructType::get(Ty, Ty
+#if LLVM_VERSION_CODE < LLVM_VERSION(5, 0)
+            , NULL
+#endif
+            );
     break;
   }
 

@@ -222,7 +222,13 @@ bool TreeToLLVM::TargetIntrinsicLower(GimpleTy *stmt, tree fndecl,
     unsigned EltBitWidth = EltTy->getPrimitiveSizeInBits();
     Type *IntEltTy = IntegerType::get(Context, EltBitWidth);
     Type *IntVecTy = VectorType::get(IntEltTy, VecTy->getNumElements());
-    APInt SignBit = APInt::getSignBit(EltBitWidth);
+    APInt SignBit =
+#if LLVM_VERSION_CODE > LLVM_VERSION(4, 0)
+        APInt::getSignMask
+#else
+        APInt::getSignBit
+#endif
+        (EltBitWidth);
     Constant *SignMask = ConstantInt::get(IntVecTy, SignBit);
     Value *IntLHS = Builder.CreateBitCast(Ops[0], IntVecTy);
     Value *IntRHS = Builder.CreateBitCast(Ops[1], IntVecTy);
