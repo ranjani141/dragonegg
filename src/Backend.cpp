@@ -586,7 +586,12 @@ static void CreateTargetMachine(const std::string &TargetTriple) {
 
   // The target can set LLVM_SET_CODE_MODEL to configure the code model used
   // used by the LLVM backend.
-  CodeModel::Model CMModel = CodeModel::Default;
+  CodeModel::Model CMModel =
+#if LLVM_VERSION_MAJOR > 5
+      CodeModel::Small;
+#else
+      CodeModel::Default;
+#endif
 #ifdef LLVM_SET_CODE_MODEL
   LLVM_SET_CODE_MODEL(CMModel);
 #endif
