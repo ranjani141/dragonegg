@@ -1936,11 +1936,13 @@ static void llvm_start_unit(void */*gcc_data*/, void */*user_data*/) {
   // Output LLVM IR if the user requested generation of lto data.
   EmitIR |= flag_generate_lto != 0;
   // We have the same needs as GCC's LTO.  Always claim to be doing LTO.
+#if (GCC_MAJOR < 5)
   flag_lto =
 #if GCC_VERSION_CODE > GCC_VERSION(4, 5)
       "";
 #else
   1;
+#endif
 #endif
   flag_generate_lto = 1;
   flag_whole_program = 0;
@@ -2733,6 +2735,10 @@ int __attribute__((visibility("default"))) plugin_init(
   struct register_pass_info pass_info;
 
 #ifndef DISABLE_VERSION_CHECK
+#ifdef DRAGONEGG_DEBUG
+  printf("DEBUG: %s, line %d: %s: %s\n", __FILE__, __LINE__, __func__,
+          version->basever);
+#endif
   // Check that the plugin is compatible with the running gcc.
   if (!version_check(version)) {
     errs() << "Incompatible plugin version\n";

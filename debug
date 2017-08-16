@@ -30,7 +30,6 @@ $CC -mmpx \
     -fverbose-asm \
     -fplugin-arg-dragonegg-enable-gcc-optzns \
     -fplugin-arg-dragonegg-emit-ir \
-    -flto \
     -S \
     $SRC \
     -wrapper gdb,--args
