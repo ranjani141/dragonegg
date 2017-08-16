@@ -105,6 +105,10 @@ extern "C" {
 #include "tree-flow.h"
 #endif
 #include "tree-pass.h"
+#if (GCC_MAJOR > 7)
+#include "stringpool.h"
+#include "attribs.h"
+#endif
 
 #if __linux__
 void *C_alloca(size_t size) { return alloca(size); }

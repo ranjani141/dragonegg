@@ -55,6 +55,10 @@ extern "C" {
 #include "print-tree.h"
 #include "calls.h"
 #endif
+#if (GCC_MAJOR > 7)
+#include "stringpool.h"
+#include "attribs.h"
+#endif
 #ifndef ENABLE_BUILD_WITH_CXX
 } // extern "C"
 #endif

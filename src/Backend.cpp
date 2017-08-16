@@ -115,6 +115,9 @@ extern "C" {
 #endif
 #include "tree-pass.h"
 #include "version.h"
+#if (GCC_MAJOR > 7)
+#include "attribs.h"
+#endif
 
 // TODO: In GCC, add targhooks.h to the list of plugin headers and remove this.
 tree default_mangle_decl_assembler_name(tree, tree);
