@@ -205,7 +205,7 @@ extern "C" {
 #endif
 #else
 #if (GCC_MAJOR == 6)
-#include "dragonegg/gt-cache-6.3.inc"
+#include "dragonegg/gt-cache-6.4.inc"
 #elif (GCC_MAJOR == 8)
 #include "dragonegg/gt-cache-8.0.inc"
 #endif
@@ -250,15 +250,15 @@ void setCachedInteger(tree t, int Val) {
   assert(slot && "Failed to create hash table slot!");
 
   if (!*slot) {
-#if (GCC_MAJOR < 5)
     *slot =
-#if GCC_VERSION_CODE > GCC_VERSION(4, 5)
+#if (GCC_MAJOR > 4)
+        ggc_alloc<tree2int>();
+#elif GCC_VERSION_CODE > GCC_VERSION(4, 5)
         ggc_alloc_tree2int();
 #else
     GGC_NEW(struct tree2int);
 #endif
     (*slot)->base.from = t;
-#endif
   }
 
   (*slot)->val = Val;
@@ -311,17 +311,17 @@ void setCachedType(tree t, Type *Ty) {
 #endif
   assert(slot && "Failed to create hash table slot!");
 
-#if (GCC_MAJOR < 5)
   if (!*slot) {
     *slot =
-#if GCC_VERSION_CODE > GCC_VERSION(4, 5)
+#if (GCC_MAJOR > 4)
+        ggc_alloc<tree2Type>();
+#elif GCC_VERSION_CODE > GCC_VERSION(4, 5)
         ggc_alloc_tree2Type();
 #else
     GGC_NEW(struct tree2Type);
 #endif
     (*slot)->base.from = t;
   }
-#endif
 
   (*slot)->Ty = Ty;
 }
@@ -388,9 +388,10 @@ void setCachedValue(tree t, Value *V) {
     return;
   }
 
-#if (GCC_MAJOR < 5)
   *slot =
-#if GCC_VERSION_CODE > GCC_VERSION(4, 5)
+#if (GCC_MAJOR > 4)
+      ggc_alloc<tree2WeakVH>();
+#elif GCC_VERSION_CODE > GCC_VERSION(4, 5)
       ggc_alloc_tree2WeakVH();
 #else
   GGC_NEW(struct tree2WeakVH);
@@ -399,5 +400,4 @@ void setCachedValue(tree t, Value *V) {
   WeakVH *W = new (&(*slot)->V) WeakVH(V);
   assert(W == &(*slot)->V && "Pointer was displaced!");
   (void)W;
-#endif
 }

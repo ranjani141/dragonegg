@@ -121,7 +121,7 @@ struct WeakVHCacheHasher : ggc_cache_ptr_hash<tree2WeakVH> {
 static GTY((cache)) hash_table<WeakVHCacheHasher> *WeakVHCache;
 
 // Include the garbage collector header.
-#include "dragonegg/gt-cache-6.3.inc"
+#include "dragonegg/gt-cache-6.4.inc"
 
 bool getCachedInteger(tree t, int &Val) {
   if (!intCache)
@@ -143,6 +143,11 @@ void setCachedInteger(tree t, int Val) {
   in.base.from = t;
   tree2int **slot = intCache->find_slot(&in, INSERT);
   assert(slot && "Failed to create hash table slot!");
+
+  if (!*slot) {
+    *slot = ggc_alloc<tree2int>();
+    (*slot)->base.from = t;
+  }
 
   (*slot)->val = Val;
 }
@@ -172,6 +177,11 @@ void setCachedType(tree t, Type *Ty) {
 
   tree2Type **slot = TypeCache->find_slot(&in, INSERT);
   assert(slot && "Failed to create hash table slot!");
+
+  if (!*slot) {
+    *slot = ggc_alloc<tree2Type>();
+    (*slot)->base.from = t;
+  }
 
   (*slot)->Ty = Ty;
 }
@@ -216,4 +226,10 @@ void setCachedValue(tree t, Value *V) {
     (*slot)->V = V;
     return;
   }
+
+  *slot = ggc_alloc<tree2WeakVH>();
+  (*slot)->base.from = t;
+  WeakVH *W = new (&(*slot)->V) WeakVH(V);
+  assert(W == &(*slot)->V && "Pointer was displaced!");
+  (void)W;
 }
