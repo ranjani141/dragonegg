@@ -1579,8 +1579,9 @@ static Type *ConvertTypeNonRecursive(tree type) {
   // If the LLVM type we chose has the wrong size or is overaligned then use a
   // bunch of bytes instead.
   assert(Ty->isSized() && "Must convert to a sized type!");
-  uint64_t LLVMSizeInBits = getDataLayout().getTypeAllocSizeInBits(Ty);
-  unsigned LLVMAlignInBits = getDataLayout().getABITypeAlignment(Ty) * 8;
+  const DataLayout &DL = getDataLayout();
+  uint64_t LLVMSizeInBits = DL.getTypeAllocSizeInBits(Ty);
+  unsigned LLVMAlignInBits = DL.getABITypeAlignment(Ty) * 8;
   if (LLVMSizeInBits != SizeInBits || LLVMAlignInBits > AlignInBits)
     Ty = GetUnitType(Context, SizeInBits / BITS_PER_UNIT);
 

@@ -23,8 +23,7 @@ if [[ -z "$SRC" ]]; then
     SRC=test/hello.c
 fi
 
-$CC -mmpx \
-    -fplugin=./dragonegg.so \
+$CC -fplugin=./dragonegg.so \
     -fplugin-arg-dragonegg-debug-pass-arguments \
     -ftime-report \
     -fverbose-asm \

@@ -387,14 +387,14 @@ static bool SizeOfGlobalMatchesDecl(GlobalValue *GV, tree decl) {
   uint64_t gcc_size = getInt64(DECL_SIZE(decl), true);
   const DataLayout *DL =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-      TheTarget->createDataLayout();
+      TheModule->getDataLayout();
 #else
       TheTarget->getSubtargetImpl()->getDataLayout();
 #endif
   unsigned Align = 8 * DL->getABITypeAlignment(Ty);
   return
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-       TheTarget->createDataLayout()->getTypeAllocSizeInBits(Ty)
+       TheModule->getDataLayout()->getTypeAllocSizeInBits(Ty)
 #else
        TheTarget->getSubtargetImpl()->getDataLayout()->getTypeAllocSizeInBits(Ty)
 #endif
@@ -671,7 +671,7 @@ static void CreateTargetMachine(const std::string &TargetTriple) {
                                        RelocModel, CMModel, CodeGenOptLevel());
 
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-  assert(TheTarget->createDataLayout()->isBigEndian() == BYTES_BIG_ENDIAN);
+  assert(TheModule->getDataLayout()->isBigEndian() == BYTES_BIG_ENDIAN);
 #else
   assert(TheTarget->getSubtargetImpl()->getDataLayout()->isBigEndian() == BYTES_BIG_ENDIAN);
 #endif
@@ -725,9 +725,9 @@ static void CreateModule(const std::string &TargetTriple) {
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
 #ifdef DRAGONEGG_DEBUG
   printf("DEBUG: %s, line %d: %s: %s\n", __FILE__, __LINE__, __func__,
-          TheTarget->createDataLayout().getStringRepresentation().c_str());
+          TheModule->getDataLayout().getStringRepresentation().c_str());
 #endif
-  TheModule->setDataLayout(TheTarget->createDataLayout().getStringRepresentation());
+  TheModule->setDataLayout(TheModule->getDataLayout().getStringRepresentation());
 #elif LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
   TheModule->setDataLayout(TheTarget->getSubtargetImpl()
                                ->getDataLayout()
@@ -804,7 +804,7 @@ static void InitializeBackend(void) {
   CreateModule(TargetTriple);
 
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-  TheFolder = new TargetFolder(TheTarget->createDataLayout());
+  TheFolder = new TargetFolder(TheModule->getDataLayout());
 #elif LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
   TheFolder = new TargetFolder(TheTarget->getSubtargetImpl()->getDataLayout());
 #else

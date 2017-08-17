@@ -621,7 +621,7 @@ static Constant *ExtractRegisterFromConstantImpl(
 Constant *
 ExtractRegisterFromConstant(Constant *C, tree type, int StartingByte) {
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-  TargetFolder Folder(TheTarget->createDataLayout());
+  TargetFolder Folder(TheModule->getDataLayout());
 #else
   TargetFolder Folder(&getDataLayout());
 #endif
@@ -1607,7 +1607,7 @@ static Constant *ConvertInitializerImpl(tree exp, TargetFolder &Folder) {
 /// for the GCC type (see ConvertType); it is never smaller than the alloc size.
 Constant *ConvertInitializer(tree exp) {
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-  TargetFolder Folder(TheTarget->createDataLayout());
+  TargetFolder Folder(TheModule->getDataLayout());
 #else
   TargetFolder Folder(&getDataLayout());
 #endif
@@ -1883,7 +1883,7 @@ static Constant *AddressOfImpl(tree exp, TargetFolder &Folder) {
 /// (see ConvertType).
 Constant *AddressOf(tree exp) {
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-  TargetFolder Folder(TheTarget->createDataLayout());
+  TargetFolder Folder(TheModule->getDataLayout());
 #else
   TargetFolder Folder(&getDataLayout());
 #endif
