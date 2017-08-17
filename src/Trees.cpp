@@ -164,7 +164,7 @@ std::string getDescriptiveName(const_tree t) {
 APInt getAPIntValue(const_tree exp, unsigned Bitwidth) {
   assert(isa<INTEGER_CST>(exp) && "Expected an integer constant!");
 #if (GCC_MAJOR > 4)
-  offset_int val = wi::to_offset(TREE_OPERAND(exp, 0));
+  widest_int val = wi::to_widest(exp);
 #else
   double_int val = tree_to_double_int(exp);
 #endif
