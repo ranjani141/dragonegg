@@ -229,9 +229,6 @@ static struct varpool_node *varpool_symbol(struct varpool_node *N) { return N; }
 
 #define asm_nodes symtab->first_asm_symbol()
 
-#define ipa_ref_list_referring_iterate(L,I,P) \
-  (L)->referring.iterate ((I), &(P))
-
 static inline struct cgraph_node *
 ipa_ref_referring_node(struct ipa_ref *ref) {
   return reinterpret_cast<cgraph_node *>(ref->referring);
@@ -1306,8 +1303,12 @@ static void emit_varpool_aliases(struct varpool_node *node) {
     emit_alias(alias->decl, node->decl);
 #else
   struct ipa_ref *ref;
-  for (int i = 0;
+  for (unsigned int i = 0;
+#if (GCC_MAJOR > 4)
+       node->iterate_direct_aliases(i, ref);
+#else
        ipa_ref_list_referring_iterate(&varpool_symbol(node)->ref_list, i, ref);
+#endif
        i++) {
     if (ref->use != IPA_REF_ALIAS)
       continue;
@@ -1986,8 +1987,12 @@ static void emit_cgraph_aliases(struct cgraph_node *node) {
   // for thunks to be output as functions and thus visit thunk aliases when the
   // thunk function is output.
   struct ipa_ref *ref;
-  for (int i = 0;
+  for (unsigned int i = 0;
+#if (GCC_MAJOR > 4)
+       node->iterate_direct_aliases(i, ref);
+#else
        ipa_ref_list_referring_iterate(&cgraph_symbol(node)->ref_list, i, ref);
+#endif
        i++) {
     if (ref->use != IPA_REF_ALIAS)
       continue;

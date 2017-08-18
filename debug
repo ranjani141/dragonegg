@@ -23,12 +23,20 @@ if [[ -z "$SRC" ]]; then
     SRC=test/hello.c
 fi
 
-$CC -fplugin=./dragonegg.so \
-    -fplugin-arg-dragonegg-debug-pass-arguments \
-    -ftime-report \
-    -fverbose-asm \
-    -fplugin-arg-dragonegg-enable-gcc-optzns \
-    -fplugin-arg-dragonegg-emit-ir \
-    -S \
-    $SRC \
-    -wrapper gdb,--args
+ASM=$4
+if [[ -z "$ASM" ]]; then
+    $CC -fplugin=./dragonegg.so \
+        -fplugin-arg-dragonegg-debug-pass-arguments \
+        -ftime-report \
+        -fverbose-asm \
+        -fplugin-arg-dragonegg-enable-gcc-optzns \
+        -fplugin-arg-dragonegg-emit-ir \
+        -S \
+        $SRC \
+        -wrapper gdb,--args
+else
+    $CC -fplugin=./dragonegg.so \
+        -fplugin-arg-dragonegg-debug-pass-arguments \
+        -ftime-report \
+        $SRC
+fi
