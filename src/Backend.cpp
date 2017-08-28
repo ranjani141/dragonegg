@@ -1820,9 +1820,6 @@ Value *make_decl_llvm(tree decl) {
 /// make_definition_llvm - Ensures that the body or initial value of the given
 /// GCC global will be output, and returns a declaration for it.
 Value *make_definition_llvm(tree decl) {
-#ifdef DRAGONEGG_DEBUG
-  printf("DEBUG: %s, line %d: %s\n", __FILE__, __LINE__, __func__);
-#endif
   // Only need to do something special for global variables.
   if (!isa<CONST_DECL>(decl) && !isa<VAR_DECL>(decl))
     return DECL_LLVM(decl);
@@ -2043,9 +2040,6 @@ static void emit_current_function() {
 /// once for each function in the compilation unit if GCC optimizations are
 /// enabled.
 static unsigned int rtl_emit_function(void) {
-#ifdef DRAGONEGG_DEBUG
-  printf("DEBUG: %s, line %d: %s\n", __FILE__, __LINE__, __func__);
-#endif
   if (!errorcount && !sorrycount) {
     InitializeBackend();
     // Convert the function.
@@ -2107,32 +2101,17 @@ class pass_rtl_emit_function : public rtl_opt_pass {
 public:
   pass_rtl_emit_function(gcc::context *ctxt)
       : rtl_opt_pass(pass_data_rtl_emit_function, ctxt) {
-#ifdef DRAGONEGG_DEBUG
-    printf("DEBUG: %s, line %d: %s: %s: static_pass_number %d\n",
-            __FILE__, __LINE__, __PRETTY_FUNCTION__, flag_check_pointer_bounds
-            ? "flag_check_pointer_bounds" : "!flag_check_pointer_bounds",
-            static_pass_number);
-#endif
   }
 
   opt_pass *clone() final override {
-#ifdef DRAGONEGG_DEBUG
-    printf("DEBUG: %s, line %d: %s\n", __FILE__, __LINE__, __PRETTY_FUNCTION__);
-#endif
     return this;
   }
 
   bool gate(function *) final override {
-#ifdef DRAGONEGG_DEBUG
-    printf("DEBUG: %s, line %d: %s\n", __FILE__, __LINE__, __PRETTY_FUNCTION__);
-#endif
     return true;
   }
 
   unsigned int execute(function *) final override {
-#ifdef DRAGONEGG_DEBUG
-    printf("DEBUG: %s, line %d: %s\n", __FILE__, __LINE__, __PRETTY_FUNCTION__);
-#endif
     return rtl_emit_function();
   }
 };
@@ -2410,6 +2389,7 @@ static void llvm_finish_unit(void */*gcc_data*/, void */*user_data*/) {
     Context.setInlineAsmDiagnosticHandler(InlineAsmDiagnosticHandler, 0);
 
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
+    printf("DEBUG: %s, %s, line %d\n", __FILE__, __func__, __LINE__);
     CodeGenPasses->run(*TheModule);
 #else
     CodeGenPasses->doInitialization();
@@ -2743,7 +2723,7 @@ int __attribute__((visibility("default"))) plugin_init(
 
 #ifndef DISABLE_VERSION_CHECK
 #ifdef DRAGONEGG_DEBUG
-  printf("DEBUG: %s, line %d: %s: %s\n", __FILE__, __LINE__, __func__,
+  printf("DEBUG: %s, line %d: %s: GCC %s\n", __FILE__, __LINE__, __func__,
           version->basever);
 #endif
   // Check that the plugin is compatible with the running gcc.
