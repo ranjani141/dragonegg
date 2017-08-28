@@ -41,6 +41,7 @@
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Target/TargetOptions.h"
 #include "llvm/Target/TargetMachine.h"
+#include "llvm/Analysis/TargetTransformInfo.h"
 #else
 #include "llvm/Bitcode/ReaderWriter.h"
 #include "llvm/PassManager.h"
@@ -716,11 +717,12 @@ static void CreateModule(const std::string &TargetTriple) {
   TheModule->setTargetTriple(TargetTriple);
   // https://reviews.llvm.org/D11103
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+  auto &DL = TheTarget->createDataLayout();
 #ifdef DRAGONEGG_DEBUG
   printf("DEBUG: %s, line %d: %s: %s\n", __FILE__, __LINE__, __func__,
-          TheModule->getDataLayout().getStringRepresentation().c_str());
+          DL.getStringRepresentation().c_str());
 #endif
-  TheModule->setDataLayout(TheModule->getDataLayout().getStringRepresentation());
+  TheModule->setDataLayout(DL);
 #elif LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
   TheModule->setDataLayout(TheTarget->getSubtargetImpl()
                                ->getDataLayout()
@@ -879,7 +881,8 @@ static void createPerFunctionOptimizationPasses() {
 #endif
   // https://reviews.llvm.org/D7992
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-  // Migrate
+  PerFunctionPasses->add(
+        createTargetTransformInfoWrapperPass(TheTarget->getTargetIRAnalysis()));
 #elif LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
   PerFunctionPasses->add(new DataLayoutPass());
 #else
@@ -952,7 +955,8 @@ static void createPerModuleOptimizationPasses() {
   PerModulePasses = new PassManager();
 #endif
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-  //
+  PerModulePasses->add(
+        createTargetTransformInfoWrapperPass(TheTarget->getTargetIRAnalysis()));
 #elif LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
   PerModulePasses->add(new DataLayoutPass());
 #else
@@ -1014,6 +1018,8 @@ static void createPerModuleOptimizationPasses() {
     if (PerModulePasses || 1) {
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
       legacy::PassManager *PM = CodeGenPasses = new legacy::PassManager();
+      PM->add(
+        createTargetTransformInfoWrapperPass(TheTarget->getTargetIRAnalysis()));
 #elif LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
       PassManager *PM = CodeGenPasses = new PassManager();
       PM->add(new DataLayoutPass());
