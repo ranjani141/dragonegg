@@ -163,8 +163,13 @@ DebugInfo *TheDebugInfo = 0;
 PassManagerBuilder PassBuilder;
 TargetMachine *TheTarget = 0;
 TargetFolder *TheFolder = 0;
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
+std::unique_ptr<raw_fd_ostream> OutStream;
+std::unique_ptr<raw_pwrite_stream> FormattedOutStream;
+#else
 raw_ostream *OutStream = 0; // Stream to write assembly code to.
 formatted_raw_ostream FormattedOutStream;
+#endif
 
 static bool DebugPassArguments;
 static bool DebugPassStructure;
@@ -846,8 +851,9 @@ static void InitializeOutputStreams(bool Binary) {
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
   std::error_code EC;
 
-  OutStream = new raw_fd_ostream(llvm_asm_file_name, EC,
-                                 Binary ? sys::fs::F_None : sys::fs::F_Text);
+  OutStream.reset(new raw_fd_ostream(
+              llvm_asm_file_name, EC,
+              Binary ? sys::fs::F_None : sys::fs::F_Text));
 
   if (EC)
     report_fatal_error(EC.message());
@@ -862,7 +868,16 @@ static void InitializeOutputStreams(bool Binary) {
 #endif
 
   // https://reviews.llvm.org/rL234535
-#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
+  if (!Binary || OutStream->supportsSeeking())
+    FormattedOutStream = std::move(OutStream);
+  else {
+    auto B = llvm::make_unique<llvm::buffer_ostream>(*OutStream);
+    FormattedOutStream = std::move(B);
+  }
+  if (!FormattedOutStream)
+    report_fatal_error("ERROR: failed to format output stream!");
+#else
   FormattedOutStream.setStream(*OutStream,
                                formatted_raw_ostream::PRESERVE_STREAM);
 #endif
@@ -926,14 +941,9 @@ static void createPerFunctionOptimizationPasses() {
     TargetMachine::CodeGenFileType CGFT = TargetMachine::CGFT_AssemblyFile;
     if (EmitObj)
       CGFT = TargetMachine::CGFT_ObjectFile;
-#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-    std::error_code EC;
-    raw_fd_ostream Out(llvm_asm_file_name, EC,
-                       EmitObj ? sys::fs::F_None : sys::fs::F_Text);
-#endif
     if (TheTarget->addPassesToEmitFile(*PM,
-#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-                                       Out,
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
+                                       *FormattedOutStream,
 #else
                                        FormattedOutStream,
 #endif
@@ -1003,7 +1013,7 @@ static void createPerModuleOptimizationPasses() {
     InitializeOutputStreams(false);
     PerModulePasses->add(createPrintModulePass(
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
-                *OutStream
+                *FormattedOutStream
 #else
                 OutStream
 #endif
@@ -1019,6 +1029,8 @@ static void createPerModuleOptimizationPasses() {
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
       legacy::PassManager *PM = CodeGenPasses = new legacy::PassManager();
       PM->add(
+        createTargetTransformInfoWrapperPass(TheTarget->getTargetIRAnalysis()));
+      CodeGenPasses->add(
         createTargetTransformInfoWrapperPass(TheTarget->getTargetIRAnalysis()));
 #elif LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
       PassManager *PM = CodeGenPasses = new PassManager();
@@ -1046,16 +1058,11 @@ static void createPerModuleOptimizationPasses() {
       TargetMachine::CodeGenFileType CGFT = TargetMachine::CGFT_AssemblyFile;
       if (EmitObj)
         CGFT = TargetMachine::CGFT_ObjectFile;
-#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-      std::error_code EC;
-      raw_fd_ostream Out(llvm_asm_file_name, EC,
-                         EmitObj ? sys::fs::F_None : sys::fs::F_Text);
-#endif
-      if (TheTarget->addPassesToEmitFile(*PM,
-#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-                                         Out,
+      if (TheTarget->addPassesToEmitFile(
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
+                                         *CodeGenPasses, *FormattedOutStream,
 #else
-                                         FormattedOutStream,
+                                         *PM, FormattedOutStream,
 #endif
                                          CGFT,
                                          DisableVerify))
@@ -2008,6 +2015,10 @@ static void emit_cgraph_aliases(struct cgraph_node *node) {
 /// emit_current_function - Turn the current gimple function into LLVM IR.  This
 /// is called once for each function in the compilation unit.
 static void emit_current_function() {
+#ifdef DRAGONEGG_DEBUG
+  printf("DEBUG: %s, %s, line %d: %s\n", __FILE__, __func__, __LINE__,
+          getDescriptiveName(current_function_decl).c_str());
+#endif
   if (!quiet_flag && DECL_NAME(current_function_decl))
     errs() << getDescriptiveName(current_function_decl);
 
@@ -2389,7 +2400,8 @@ static void llvm_finish_unit(void */*gcc_data*/, void */*user_data*/) {
     Context.setInlineAsmDiagnosticHandler(InlineAsmDiagnosticHandler, 0);
 
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
-    printf("DEBUG: %s, %s, line %d\n", __FILE__, __func__, __LINE__);
+    CodeGenPasses->add(
+        createTargetTransformInfoWrapperPass(TheTarget->getTargetIRAnalysis()));
     CodeGenPasses->run(*TheModule);
 #else
     CodeGenPasses->doInitialization();
@@ -2403,8 +2415,12 @@ static void llvm_finish_unit(void */*gcc_data*/, void */*user_data*/) {
     Context.setInlineAsmDiagnosticHandler(OldHandler, OldHandlerData);
   }
 
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+  FormattedOutStream->flush();
+#else
   FormattedOutStream.flush();
   OutStream->flush();
+#endif
   //TODO  timevar_pop(TV_LLVM_PERFILE);
 
   // We have finished - shutdown the plugin.  Doing this here ensures that timer
@@ -2464,9 +2480,6 @@ public:
 /// execute_correct_state - Correct the cgraph state to ensure that newly
 /// inserted functions are processed before being converted to LLVM IR.
 static unsigned int execute_correct_state(void) {
-#ifdef DRAGONEGG_DEBUG
-  printf("DEBUG: %s, line %d: %s\n", __FILE__, __LINE__, __func__);
-#endif
 #if (GCC_MAJOR > 4)
   if (symtab->state < IPA_SSA)
     symtab->state = IPA_SSA;
