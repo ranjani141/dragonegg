@@ -1027,9 +1027,7 @@ static void createPerModuleOptimizationPasses() {
     // this for fast -O0 compiles!
     if (PerModulePasses || 1) {
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-      legacy::PassManager *PM = CodeGenPasses = new legacy::PassManager();
-      PM->add(
-        createTargetTransformInfoWrapperPass(TheTarget->getTargetIRAnalysis()));
+      CodeGenPasses = new legacy::PassManager();
       CodeGenPasses->add(
         createTargetTransformInfoWrapperPass(TheTarget->getTargetIRAnalysis()));
 #elif LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
@@ -2400,8 +2398,6 @@ static void llvm_finish_unit(void */*gcc_data*/, void */*user_data*/) {
     Context.setInlineAsmDiagnosticHandler(InlineAsmDiagnosticHandler, 0);
 
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
-    CodeGenPasses->add(
-        createTargetTransformInfoWrapperPass(TheTarget->getTargetIRAnalysis()));
     CodeGenPasses->run(*TheModule);
 #else
     CodeGenPasses->doInitialization();
