@@ -191,15 +191,11 @@ std::vector<Constant *> AttributeAnnotateGlobals;
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
 static legacy::FunctionPassManager *PerFunctionPasses = 0;
 static legacy::PassManager *PerModulePasses = 0;
-static legacy::PassManager *CodeGenPasses = 0;
+static legacy::FunctionPassManager *CodeGenPasses = 0;
 #else
 static FunctionPassManager *PerFunctionPasses = 0;
 static PassManager *PerModulePasses = 0;
-#if LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
-static PassManager *CodeGenPasses = 0;
-#else
 static FunctionPassManager *CodeGenPasses = 0;
-#endif
 #endif
 
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
@@ -578,7 +574,7 @@ static void CreateTargetMachine(const std::string &TargetTriple) {
   // used by the LLVM backend.
   Reloc::Model RelocModel
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-      ;
+      = Reloc::PIC_;
 #else
       = Reloc::Default;
 #endif
@@ -691,7 +687,8 @@ static void output_ident(const char *ident_str) {
   Directive += LLVM_VERSION_STRING;
   Directive += "\"";
 #ifdef DRAGONEGG_DEBUG
-  printf("DEBUG: %s, line %d: %s: %s\n", __FILE__, __LINE__, __func__, Directive.c_str());
+  printf("DEBUG: %s, line %d: %s: %s\n", __FILE__, __LINE__, __func__,
+          Directive.c_str());
 #endif
   TheModule->setModuleInlineAsm(Directive);
 }
@@ -796,7 +793,8 @@ static void InitializeBackend(void) {
   // Create the target machine to generate code for.
   const std::string TargetTriple = ComputeTargetTriple();
 #ifdef DRAGONEGG_DEBUG
-  printf("DEBUG: %s, line %d: %s: %s\n", __FILE__, __LINE__, __func__, TargetTriple.c_str());
+  printf("DEBUG: %s, line %d: %s: %s\n", __FILE__, __LINE__, __func__,
+          TargetTriple.c_str());
 #endif
   CreateTargetMachine(TargetTriple);
 
@@ -869,9 +867,9 @@ static void InitializeOutputStreams(bool Binary) {
 
   // https://reviews.llvm.org/rL234535
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
-  if (!Binary || OutStream->supportsSeeking())
+  if (!Binary || OutStream->supportsSeeking()) {
     FormattedOutStream = std::move(OutStream);
-  else {
+  } else {
     auto B = llvm::make_unique<llvm::buffer_ostream>(*OutStream);
     FormattedOutStream = std::move(B);
   }
@@ -1027,12 +1025,9 @@ static void createPerModuleOptimizationPasses() {
     // this for fast -O0 compiles!
     if (PerModulePasses || 1) {
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-      CodeGenPasses = new legacy::PassManager();
+      CodeGenPasses = new legacy::FunctionPassManager(TheModule);
       CodeGenPasses->add(
         createTargetTransformInfoWrapperPass(TheTarget->getTargetIRAnalysis()));
-#elif LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
-      PassManager *PM = CodeGenPasses = new PassManager();
-      PM->add(new DataLayoutPass());
 #else
       FunctionPassManager *PM = CodeGenPasses =
           new FunctionPassManager(TheModule);
@@ -2397,16 +2392,12 @@ static void llvm_finish_unit(void */*gcc_data*/, void */*user_data*/) {
     void *OldHandlerData = Context.getInlineAsmDiagnosticContext();
     Context.setInlineAsmDiagnosticHandler(InlineAsmDiagnosticHandler, 0);
 
-#if LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
-    CodeGenPasses->run(*TheModule);
-#else
     CodeGenPasses->doInitialization();
     for (Module::iterator I = TheModule->begin(), E = TheModule->end(); I != E;
          ++I)
       if (!I->isDeclaration())
         CodeGenPasses->run(*I);
     CodeGenPasses->doFinalization();
-#endif
 
     Context.setInlineAsmDiagnosticHandler(OldHandler, OldHandlerData);
   }

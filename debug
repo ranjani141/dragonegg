@@ -38,5 +38,6 @@ else
     $CC -fplugin=./dragonegg.so \
         -fplugin-arg-dragonegg-debug-pass-arguments \
         -ftime-report \
-        $SRC
+        $SRC \
+        -wrapper gdb,--args
 fi
