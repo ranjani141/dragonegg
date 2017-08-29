@@ -191,7 +191,7 @@ std::vector<Constant *> AttributeAnnotateGlobals;
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
 static legacy::FunctionPassManager *PerFunctionPasses = 0;
 static legacy::PassManager *PerModulePasses = 0;
-static legacy::FunctionPassManager *CodeGenPasses = 0;
+static legacy::PassManager *CodeGenPasses = 0;
 #else
 static FunctionPassManager *PerFunctionPasses = 0;
 static PassManager *PerModulePasses = 0;
@@ -1025,7 +1025,7 @@ static void createPerModuleOptimizationPasses() {
     // this for fast -O0 compiles!
     if (PerModulePasses || 1) {
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-      CodeGenPasses = new legacy::FunctionPassManager(TheModule);
+      CodeGenPasses = new legacy::PassManager();
       CodeGenPasses->add(
         createTargetTransformInfoWrapperPass(TheTarget->getTargetIRAnalysis()));
 #else
@@ -2381,8 +2381,12 @@ static void llvm_finish_unit(void */*gcc_data*/, void */*user_data*/) {
 
   // Run module-level optimizers, if any are present.
   createPerModuleOptimizationPasses();
-  if (PerModulePasses)
+  if (PerModulePasses) {
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+    // TODO: createPasses between PerModulePasses and PerFunctionPasses.
+#endif
     PerModulePasses->run(*TheModule);
+  }
 
   // Run the code generator, if present.
   if (CodeGenPasses) {
@@ -2392,12 +2396,16 @@ static void llvm_finish_unit(void */*gcc_data*/, void */*user_data*/) {
     void *OldHandlerData = Context.getInlineAsmDiagnosticContext();
     Context.setInlineAsmDiagnosticHandler(InlineAsmDiagnosticHandler, 0);
 
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+    CodeGenPasses->run(*TheModule);
+#else
     CodeGenPasses->doInitialization();
     for (Module::iterator I = TheModule->begin(), E = TheModule->end(); I != E;
          ++I)
       if (!I->isDeclaration())
         CodeGenPasses->run(*I);
     CodeGenPasses->doFinalization();
+#endif
 
     Context.setInlineAsmDiagnosticHandler(OldHandler, OldHandlerData);
   }
