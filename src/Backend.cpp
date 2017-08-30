@@ -163,6 +163,7 @@ DebugInfo *TheDebugInfo = 0;
 PassManagerBuilder PassBuilder;
 TargetMachine *TheTarget = 0;
 TargetFolder *TheFolder = 0;
+TargetOptions TargetOpts;
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
 std::unique_ptr<raw_fd_ostream> OutStream;
 std::unique_ptr<raw_pwrite_stream> FormattedOutStream;
@@ -548,9 +549,6 @@ static void setNoFramePointerElim(bool NoFramePointerElim) {
 static void CreateTargetMachine(const std::string &TargetTriple) {
   // Create the module itself.
   StringRef ModuleID = main_input_filename ? main_input_filename : "";
-#ifdef DRAGONEGG_DEBUG
-  printf("DEBUG: %s, line %d: %s: %s\n", __FILE__, __LINE__, __func__, ModuleID.data());
-#endif
   TheModule = new Module(ModuleID, TheContext);
 
   // FIXME: Figure out how to select the target and pass down subtarget info.
@@ -572,11 +570,10 @@ static void CreateTargetMachine(const std::string &TargetTriple) {
 
   // The target can set LLVM_SET_RELOC_MODEL to configure the relocation model
   // used by the LLVM backend.
-  Reloc::Model RelocModel
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-      = Reloc::PIC_;
+  auto RelocModel = Optional<Reloc::Model>();
 #else
-      = Reloc::Default;
+  Reloc::Model RelocModel = Reloc::Default;
 #endif
 #ifdef LLVM_SET_RELOC_MODEL
   LLVM_SET_RELOC_MODEL(RelocModel);
@@ -584,17 +581,14 @@ static void CreateTargetMachine(const std::string &TargetTriple) {
 
   // The target can set LLVM_SET_CODE_MODEL to configure the code model used
   // used by the LLVM backend.
-  CodeModel::Model CMModel =
 #if LLVM_VERSION_MAJOR > 5
-      CodeModel::Small;
+  auto CMModel = Optional<CodeModel::Model>();
 #else
-      CodeModel::Default;
+  CodeModel::Model CMModel = CodeModel::Default;
 #endif
 #ifdef LLVM_SET_CODE_MODEL
   LLVM_SET_CODE_MODEL(CMModel);
 #endif
-
-  TargetOptions Options;
 
   // https://reviews.llvm.org/D9830
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
@@ -602,10 +596,10 @@ static void CreateTargetMachine(const std::string &TargetTriple) {
 #else
   if (flag_omit_frame_pointer) {
     // Eliminate frame pointers everywhere.
-    Options.NoFramePointerElim = false;
+    TargetOpts.NoFramePointerElim = false;
   } else {
     // Keep frame pointers everywhere.
-    Options.NoFramePointerElim = true;
+    TargetOpts.NoFramePointerElim = true;
   }
 #endif
 
@@ -616,9 +610,9 @@ static void CreateTargetMachine(const std::string &TargetTriple) {
   // in its LLVM_SET_TARGET_MACHINE_OPTIONS method when this option is true.
 
 #ifdef HAVE_INITFINI_ARRAY
-  Options.UseInitArray = true;
+  TargetOpts.UseInitArray = true;
 #else
-  Options.UseInitArray = false;
+  TargetOpts.UseInitArray = false;
 #endif
 
   // TODO: Set float ABI type.
@@ -626,10 +620,10 @@ static void CreateTargetMachine(const std::string &TargetTriple) {
   // TODO: Set FP fusion mode.
 
   // TODO: LessPreciseFPMADOption.
-  Options.NoInfsFPMath = flag_finite_math_only;
-  Options.NoNaNsFPMath = flag_finite_math_only;
-  Options.NoZerosInBSS = !flag_zero_initialized_in_bss;
-  Options.UnsafeFPMath =
+  TargetOpts.NoInfsFPMath = flag_finite_math_only;
+  TargetOpts.NoNaNsFPMath = flag_finite_math_only;
+  TargetOpts.NoZerosInBSS = !flag_zero_initialized_in_bss;
+  TargetOpts.UnsafeFPMath =
 #if GCC_VERSION_CODE > GCC_VERSION(4, 5)
   fast_math_flags_set_p(&global_options);
 #else
@@ -645,25 +639,31 @@ static void CreateTargetMachine(const std::string &TargetTriple) {
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
   TheModule->setPIELevel(PIELevel::Large);
 #else
-  Options.PositionIndependentExecutable = flag_pie;
+  TargetOpts.PositionIndependentExecutable = flag_pie;
 #endif
 
 #ifdef LLVM_SET_TARGET_MACHINE_OPTIONS
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
   setNoFramePointerElim(TARGET_OMIT_LEAF_FRAME_POINTER);
 #else
-  LLVM_SET_TARGET_MACHINE_OPTIONS(Options);
+  LLVM_SET_TARGET_MACHINE_OPTIONS(TargetOpts);
 #endif
 #endif
   // Binutils does not yet support the use of file directives with an explicit
   // directory.  FIXME: Once GCC learns to detect support for this, condition
   // on what GCC detected.
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
-  Options.MCOptions.MCUseDwarfDirectory = false;
+  TargetOpts.MCOptions.MCUseDwarfDirectory = false;
 #endif
 
-  TheTarget = TME->createTargetMachine(TargetTriple, CPU, FeatureStr, Options,
-                                       RelocModel, CMModel, CodeGenOptLevel());
+#ifdef DRAGONEGG_DEBUG
+  printf("DEBUG: %s, line %d: %s: triple: %s cpu: %s feature: %s\n", __FILE__,
+          __LINE__, __func__, TargetTriple.c_str(), CPU.c_str(),
+          FeatureStr.c_str());
+#endif
+  TheTarget = TME->createTargetMachine(TargetTriple, CPU, FeatureStr,
+                                       TargetOpts, RelocModel, CMModel,
+                                       CodeGenOptLevel());
 
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
   assert(TheModule->getDataLayout()->isBigEndian() == BYTES_BIG_ENDIAN);
@@ -950,7 +950,9 @@ static void createPerFunctionOptimizationPasses() {
       llvm_unreachable("Error interfacing to target machine!");
   }
 
+#ifdef LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
   PerFunctionPasses->doInitialization();
+#endif
 }
 
 static void createPerModuleOptimizationPasses() {
@@ -1025,6 +1027,9 @@ static void createPerModuleOptimizationPasses() {
     // this for fast -O0 compiles!
     if (PerModulePasses || 1) {
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+#if LLVM_VERSION_MAJOR > 4
+      TheTarget->adjustPassManager(PassBuilder);
+#endif
       CodeGenPasses = new legacy::PassManager();
       CodeGenPasses->add(
         createTargetTransformInfoWrapperPass(TheTarget->getTargetIRAnalysis()));
@@ -1904,6 +1909,10 @@ static void TakeoverAsmOutput(void) {
     memcpy(name, llvm_asm_file_name, len + 1);
     asm_file_name = strcat(name, ".gcc");
   }
+#ifdef DRAGONEGG_DEBUG
+  printf("DEBUG: %s, line %d: %s: llvm_asm_file_name %s, asm_file_name %s\n",
+          __FILE__, __LINE__, __func__, llvm_asm_file_name, asm_file_name);
+#endif
 }
 
 /// no_target_thunks - Hook for can_output_mi_thunk that always says "no".
@@ -2008,10 +2017,6 @@ static void emit_cgraph_aliases(struct cgraph_node *node) {
 /// emit_current_function - Turn the current gimple function into LLVM IR.  This
 /// is called once for each function in the compilation unit.
 static void emit_current_function() {
-#ifdef DRAGONEGG_DEBUG
-  printf("DEBUG: %s, %s, line %d: %s\n", __FILE__, __func__, __LINE__,
-          getDescriptiveName(current_function_decl).c_str());
-#endif
   if (!quiet_flag && DECL_NAME(current_function_decl))
     errs() << getDescriptiveName(current_function_decl);
 
@@ -2032,8 +2037,15 @@ static void emit_current_function() {
   if (!errorcount && !sorrycount) { // Do not process broken code.
     createPerFunctionOptimizationPasses();
 
-    if (PerFunctionPasses)
+    if (PerFunctionPasses) {
+#ifdef DRAGONEGG_DEBUG
+      printf("DEBUG: %s, line %d: %s: %s\n", __FILE__, __LINE__, __func__,
+              Fn->getName().str().c_str());
+#endif
+#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
       PerFunctionPasses->run(*Fn);
+#endif
+    }
 
     // TODO: Nuke the .ll code for the function at -O[01] if we don't want to
     // inline it or something else.
@@ -2281,9 +2293,6 @@ static void InlineAsmDiagnosticHandler(const SMDiagnostic &D, void */*Data*/,
 /// llvm_finish_unit - Finish the .s file.  This is called by GCC once the
 /// compilation unit has been completely processed.
 static void llvm_finish_unit(void */*gcc_data*/, void */*user_data*/) {
-#ifdef DRAGONEGG_DEBUG
-  printf("DEBUG: %s, line %d: %s\n", __FILE__, __LINE__, __func__);
-#endif
   if (errorcount || sorrycount)
     return; // Do not process broken code.
 
@@ -2376,17 +2385,26 @@ static void llvm_finish_unit(void */*gcc_data*/, void */*user_data*/) {
   }
 
   // Finish off the per-function pass.
-  if (PerFunctionPasses)
+  if (PerFunctionPasses) {
+#ifdef LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+    PerFunctionPasses->doInitialization();
+    for (Function &F : *TheModule) {
+      if (!F.isDeclaration()) {
+#ifdef DRAGONEGG_DEBUG
+        printf("DEBUG: %s, line %d: %s: Per-function optimization for %s\n",
+                __FILE__, __LINE__, __func__, F.getName().str().c_str());
+#endif
+        PerFunctionPasses->run(F);
+      }
+    }
+#endif
     PerFunctionPasses->doFinalization();
+  }
 
   // Run module-level optimizers, if any are present.
   createPerModuleOptimizationPasses();
-  if (PerModulePasses) {
-#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-    // TODO: createPasses between PerModulePasses and PerFunctionPasses.
-#endif
+  if (PerModulePasses)
     PerModulePasses->run(*TheModule);
-  }
 
   // Run the code generator, if present.
   if (CodeGenPasses) {

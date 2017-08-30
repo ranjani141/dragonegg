@@ -36,6 +36,7 @@ if [[ -z "$ASM" ]]; then
         -wrapper gdb,--args
 else
     $CC -fplugin=./dragonegg.so \
+        -fplugin-arg-dragonegg-save-gcc-output \
         -fplugin-arg-dragonegg-debug-pass-arguments \
         -ftime-report \
         $SRC \
