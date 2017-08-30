@@ -821,8 +821,10 @@ static void InitializeBackend(void) {
   PassBuilder.SizeLevel = optimize_size;
   PassBuilder.DisableUnitAtATime = !flag_unit_at_a_time;
   PassBuilder.DisableUnrollLoops = !flag_unroll_loops;
-//  Don't turn on the SLP vectorizer by default at -O3 for the moment.
-//  PassBuilder.SLPVectorize = flag_tree_slp_vectorize;
+  // Don't turn on the SLP vectorizer by default at -O3 for the moment.
+#if (GCC_MAJOR > 4)
+  PassBuilder.SLPVectorize = flag_tree_slp_vectorize;
+#endif
   PassBuilder.LoopVectorize =
 #if (GCC_MAJOR > 7)
       flag_tree_loop_vectorize;
@@ -831,14 +833,19 @@ static void InitializeBackend(void) {
 #endif
 
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-  PassBuilder.LibraryInfo =
-      new TargetLibraryInfoImpl((Triple) TheModule->getTargetTriple());
+  PassBuilder.MergeFunctions = false;
+  PassBuilder.RerollLoops = false;
+  PassBuilder.LibraryInfo = new TargetLibraryInfoImpl(Triple(TargetTriple));
 #else
-  PassBuilder.LibraryInfo =
-      new TargetLibraryInfo((Triple) TheModule->getTargetTriple());
+  PassBuilder.LibraryInfo = new TargetLibraryInfo(Triple(TargetTriple));
 #endif
-  if (flag_no_simplify_libcalls)
+  if (flag_no_simplify_libcalls) {
+#ifdef DRAGONEGG_DEBUG
+    printf("DEBUG: %s, line %d: %s: disable all library functions.\n",
+            __FILE__, __LINE__, __func__);
+#endif
     PassBuilder.LibraryInfo->disableAllFunctions();
+  }
 
   Initialized = true;
 }
@@ -909,7 +916,9 @@ static void createPerFunctionOptimizationPasses() {
   PerFunctionPasses->add(createVerifierPass());
 #endif
 
+#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
   PassBuilder.OptLevel = PerFunctionOptLevel();
+#endif
   PassBuilder.populateFunctionPassManager(*PerFunctionPasses);
 
   // If there are no module-level passes that have to be run, we codegen as
@@ -1033,6 +1042,10 @@ static void createPerModuleOptimizationPasses() {
       CodeGenPasses = new legacy::PassManager();
       CodeGenPasses->add(
         createTargetTransformInfoWrapperPass(TheTarget->getTargetIRAnalysis()));
+      Triple TargetTriple(TheModule->getTargetTriple());
+      std::unique_ptr<TargetLibraryInfoImpl> TLII(
+              new TargetLibraryInfoImpl(TargetTriple));
+      CodeGenPasses->add(new TargetLibraryInfoWrapperPass(*TLII));
 #else
       FunctionPassManager *PM = CodeGenPasses =
           new FunctionPassManager(TheModule);
@@ -2384,6 +2397,9 @@ static void llvm_finish_unit(void */*gcc_data*/, void */*user_data*/) {
     AttributeAnnotateGlobals.clear();
   }
 
+  // Run module-level optimizers, if any are present.
+  createPerModuleOptimizationPasses();
+
   // Finish off the per-function pass.
   if (PerFunctionPasses) {
 #ifdef LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
@@ -2401,8 +2417,6 @@ static void llvm_finish_unit(void */*gcc_data*/, void */*user_data*/) {
     PerFunctionPasses->doFinalization();
   }
 
-  // Run module-level optimizers, if any are present.
-  createPerModuleOptimizationPasses();
   if (PerModulePasses)
     PerModulePasses->run(*TheModule);
 
