@@ -1,26 +1,24 @@
 #!/bin/bash 
 
-echo "Usage: for example: ./debug /opt/gcc-git/bin/gcc /opt/llvm-svn/bin/llvm-config test/hello.c"
-
-rm *.s
+rm *.s a.out
 
 CC=$1
 if [[ -z "$CC" ]]; then
     CC=gcc
-    $CC -v
 fi
+$CC --version
 
 LC=$2
 if [[ -z "$LC" ]]; then
     LC=llvm-config
 fi
-$LC --version
+echo "LLVM version:" $($LC --version)
 
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$($LC --libdir)
 
 SRC=$3
 if [[ -z "$SRC" ]]; then
-    SRC=test/hello.c
+    SRC=test/validator/c/hello.c
 fi
 
 ASM=$4
@@ -38,7 +36,7 @@ else
     $CC -fplugin=./dragonegg.so \
         -fplugin-arg-dragonegg-save-gcc-output \
         -fplugin-arg-dragonegg-debug-pass-arguments \
+        -fverbose-asm \
         -ftime-report \
-        $SRC \
-        -wrapper gdb,--args
+        $SRC
 fi

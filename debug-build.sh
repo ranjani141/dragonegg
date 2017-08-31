@@ -1,11 +1,10 @@
 #!/bin/bash
 
-echo "Usage: for example ./debug-build /opt/gcc-git/bin/gcc /opt/llvm-svn/bin/llvm-config"
-
 make clean
 
 CC=$1
 if [[ -z "$CC" ]]; then
+    echo "CC can be arm-linux-gnu-gcc, "
     CC=gcc
 fi
 $CC --version
@@ -14,7 +13,7 @@ LC=$2
 if [[ -z "$LC" ]]; then
     LC=llvm-config
 fi
-$LC --version
+echo "LLVM version:" $($LC --version)
 
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$($LC --libdir)
 
