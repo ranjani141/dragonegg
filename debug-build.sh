@@ -4,13 +4,13 @@ make clean
 
 CC=$1
 if [[ -z "$CC" ]]; then
-    CC=gcc
+  CC=gcc
 fi
 $CC --version
 
 LC=$2
 if [[ -z "$LC" ]]; then
-    LC=llvm-config
+  LC=llvm-config
 fi
 echo "LLVM version:" $($LC --version)
 
