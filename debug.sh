@@ -41,6 +41,11 @@ if [[ -z "$ASM" ]]; then
       -S \
       $SRC \
       -wrapper gdb,--args
+  if [ $CC == "arm-linux-gnu-gcc" ]; then
+    $CC $CPATH -S $SRC -o hello-$CC.s
+    $CC -o hello-$CC hello-$CC.s $LIBPATH $LIB
+    qemu-arm -L /usr/arm-linux-gnu ./hello-$CC
+  fi
 else
   $CC -fplugin=./dragonegg.so \
       $CPATH \
