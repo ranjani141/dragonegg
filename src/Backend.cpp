@@ -644,11 +644,17 @@ static void CreateTargetMachine(const std::string &TargetTriple) {
 
 #ifdef LLVM_SET_TARGET_MACHINE_OPTIONS
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+#ifdef TARGET_OMIT_LEAF_FRAME_POINTER
+  // x86
   setNoFramePointerElim(TARGET_OMIT_LEAF_FRAME_POINTER);
+#else
+  // TODO: arm
+#endif
 #else
   LLVM_SET_TARGET_MACHINE_OPTIONS(TargetOpts);
 #endif
 #endif
+
   // Binutils does not yet support the use of file directives with an explicit
   // directory.  FIXME: Once GCC learns to detect support for this, condition
   // on what GCC detected.
@@ -959,7 +965,7 @@ static void createPerFunctionOptimizationPasses() {
       llvm_unreachable("Error interfacing to target machine!");
   }
 
-#ifdef LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
+#if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
   PerFunctionPasses->doInitialization();
 #endif
 }
@@ -2402,7 +2408,7 @@ static void llvm_finish_unit(void */*gcc_data*/, void */*user_data*/) {
 
   // Finish off the per-function pass.
   if (PerFunctionPasses) {
-#ifdef LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
     PerFunctionPasses->doInitialization();
     for (Function &F : *TheModule) {
       if (!F.isDeclaration()) {

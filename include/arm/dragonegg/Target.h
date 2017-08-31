@@ -31,8 +31,8 @@
    (isVoid || hasArgList). */
 
 /* from  TARGET_AAPCS_BASED */
-#define DEFAULT_TARGET_AAPCS_BASED(ARM_DEFAULT_ABI != ARM_ABI_APCS &&          \
-                                   ARM_DEFAULT_ABI != ARM_ABI_ATPCS)
+#define DEFAULT_TARGET_AAPCS_BASED ARM_DEFAULT_ABI != ARM_ABI_APCS &&          \
+                                   ARM_DEFAULT_ABI != ARM_ABI_ATPCS
 
 #define TARGET_ADJUST_LLVM_CC(CC, type)                                        \
   {                                                                            \
