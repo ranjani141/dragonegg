@@ -4,7 +4,6 @@ make clean
 
 CC=$1
 if [[ -z "$CC" ]]; then
-    echo "CC can be arm-linux-gnu-gcc, "
     CC=gcc
 fi
 $CC --version
