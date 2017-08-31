@@ -645,10 +645,24 @@ static void CreateTargetMachine(const std::string &TargetTriple) {
 #ifdef LLVM_SET_TARGET_MACHINE_OPTIONS
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
 #ifdef TARGET_OMIT_LEAF_FRAME_POINTER
-  // x86
+  // X86
   setNoFramePointerElim(TARGET_OMIT_LEAF_FRAME_POINTER);
 #else
-  // TODO: arm
+  // ARM
+  {
+    if (TARGET_SOFT_FLOAT) {
+#ifdef DRAGONEGG_DEBUG
+      printf("DEBUG: %s, line %d: %s: softfp\n", __FILE__, __LINE__, __func__);
+#endif
+      TargetOpts.FloatABIType = llvm::FloatABI::Soft;
+    }
+    if (TARGET_HARD_FLOAT_ABI) {
+#ifdef DRAGONEGG_DEBUG
+      printf("DEBUG: %s, line %d: %s: hard\n", __FILE__, __LINE__, __func__);
+#endif
+      TargetOpts.FloatABIType = llvm::FloatABI::Hard;
+    }
+  }
 #endif
 #else
   LLVM_SET_TARGET_MACHINE_OPTIONS(TargetOpts);
