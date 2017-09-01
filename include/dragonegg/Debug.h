@@ -49,6 +49,7 @@ typedef llvm::DISubprogram * MigDISubprogram;
 typedef llvm::DIFile * MigDIFile;
 typedef llvm::DINodeArray MigDINodeArray;
 typedef llvm::DICompositeType * MigDICompositeType;
+typedef llvm::TrackingMDRef MigTrackingMDRefType;
 #else
 typedef llvm::DIType MigDIType;
 typedef llvm::DIDescriptor MigDIScope;
@@ -57,6 +58,7 @@ typedef llvm::DISubprogram MigDISubprogram;
 typedef llvm::DIFile MigDIFile;
 typedef llvm::DIArray MigDINodeArray;
 typedef llvm::DICompositeType MigDICompositeType;
+typedef llvm::WeakVH MigTrackingMDRefType;
 #endif
 
 // Forward declarations
@@ -72,10 +74,15 @@ class Module;
 /// is responsible for emitting to llvm globals or pass directly to the backend.
 class DebugInfo {
 private:
-  llvm::SmallVector<llvm::WeakVH, 4> RegionStack;
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+  llvm::SmallVector<llvm::Metadata *, 4>
+#else
+  llvm::SmallVector<llvm::WeakVH, 4>
+#endif
+      RegionStack;
   // Stack to track declarative scopes.
 
-  std::map<tree_node *, llvm::WeakVH> RegionMap;
+  std::map<tree_node *, MigTrackingMDRefType> RegionMap;
 
   llvm::Module &M;
   llvm::LLVMContext &VMContext;
@@ -89,13 +96,13 @@ private:
   int PrevLineNo;           // Previous location line# encountered.
   llvm::BasicBlock *PrevBB;       // Last basic block encountered.
 
-  std::map<tree_node *, llvm::WeakVH> TypeCache;
+  std::map<tree_node *, MigTrackingMDRefType> TypeCache;
   // Cache of previously constructed
   // Types.
-  std::map<tree_node *, llvm::WeakVH> SPCache;
+  std::map<tree_node *, MigTrackingMDRefType> SPCache;
   // Cache of previously constructed
   // Subprograms.
-  std::map<tree_node *, llvm::WeakVH> NameSpaceCache;
+  std::map<tree_node *, MigTrackingMDRefType> NameSpaceCache;
   // Cache of previously constructed name
   // spaces.
 

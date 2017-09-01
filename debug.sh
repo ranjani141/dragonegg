@@ -7,6 +7,7 @@ if [[ -z "$CC" ]]; then
   CC=gcc
 fi
 $CC --version
+CFLAGS="-Wall"
 CPATH=
 LIBPATH=
 LIB=
@@ -32,6 +33,7 @@ fi
 ASM=$4
 if [[ -z "$ASM" ]]; then
   $CC -fplugin=./dragonegg.so \
+      $CFLAGS \
       $CPATH \
       -fplugin-arg-dragonegg-debug-pass-arguments \
       -ftime-report \
@@ -42,12 +44,13 @@ if [[ -z "$ASM" ]]; then
       $SRC \
       -wrapper gdb,--args
   if [ $CC == "arm-linux-gnu-gcc" ]; then
-    $CC $CPATH -S $SRC -o hello-$CC.s
+    $CC $CFLAGS $CPATH -S $SRC -o hello-$CC.s
     $CC -o hello-$CC hello-$CC.s $LIBPATH $LIB
     qemu-arm -L /usr/arm-linux-gnu ./hello-$CC
   fi
 else
   $CC -fplugin=./dragonegg.so \
+      $CFLAGS \
       $CPATH \
       -fplugin-arg-dragonegg-save-gcc-output \
       -fplugin-arg-dragonegg-debug-pass-arguments \

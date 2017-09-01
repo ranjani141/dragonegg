@@ -243,7 +243,7 @@ void DebugInfo::EmitFunctionStart(tree FnDecl, Function *Fn) {
 
   unsigned lineno = CurLineNo;
 
-  std::map<tree_node *, WeakVH>::iterator I = SPCache.find(FnDecl);
+  std::map<tree_node *, MigTrackingMDRefType>::iterator I = SPCache.find(FnDecl);
   if (I != SPCache.end()) {
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
     DISubprogram *SPDecl = llvm::getDISubprogram(cast<MDNode>(I->second));
@@ -255,16 +255,10 @@ void DebugInfo::EmitFunctionStart(tree FnDecl, Function *Fn) {
 
     // Push function on region stack.
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-    RegionStack.push_back(WeakVH(cast<Value>(SP)));
-    RegionMap[FnDecl] = WeakVH(cast<Value>(SP));
+    RegionStack.push_back(SP);
+    RegionMap[FnDecl].reset(SP);
 #else
-    RegionStack.push_back(
-#if LLVM_VERSION_CODE > LLVM_VERSION(3, 3)
-            SP
-#else
-            WeakVH(SP)
-#endif
-            );
+    RegionStack.push_back(WeakVH(SP));
     RegionMap[FnDecl] = WeakVH(SP);
 #endif
     return;
@@ -300,8 +294,8 @@ void DebugInfo::EmitFunctionStart(tree FnDecl, Function *Fn) {
 
     // Push function on region stack.
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-    RegionStack.push_back(WeakVH(cast<Value>(SP)));
-    RegionMap[FnDecl] = WeakVH(cast<Value>(SP));
+    RegionStack.push_back(SP);
+    RegionMap[FnDecl].reset(SP);
 #else
     RegionStack.push_back(WeakVH(SP));
     RegionMap[FnDecl] = WeakVH(SP);
@@ -338,11 +332,11 @@ void DebugInfo::EmitFunctionStart(tree FnDecl, Function *Fn) {
           optimize, Fn);
 
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-  SPCache[FnDecl] = WeakVH(cast<Value>(SP));
+  SPCache[FnDecl].reset(SP);
 
   // Push function on region stack.
-  RegionStack.push_back(WeakVH(cast<Value>(SP)));
-  RegionMap[FnDecl] = WeakVH(cast<Value>(SP));
+  RegionStack.push_back(SP);
+  RegionMap[FnDecl].reset(SP);
 #else
   SPCache[FnDecl] = WeakVH(SP);
   RegionStack.push_back(WeakVH(SP));
@@ -352,7 +346,7 @@ void DebugInfo::EmitFunctionStart(tree FnDecl, Function *Fn) {
 
 /// getOrCreateNameSpace - Get name space descriptor for the tree node.
 MigDINamespace DebugInfo::getOrCreateNameSpace(tree Node, MigDIScope Context) {
-  std::map<tree_node *, WeakVH>::iterator I = NameSpaceCache.find(Node);
+  std::map<tree_node *, MigTrackingMDRefType>::iterator I = NameSpaceCache.find(Node);
   if (I != NameSpaceCache.end())
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
     return dyn_cast_or_null<DINamespace>(cast<MDNode>(I->second));
@@ -372,11 +366,11 @@ MigDINamespace DebugInfo::getOrCreateNameSpace(tree Node, MigDIScope Context) {
 #endif
       );
 
-  NameSpaceCache[Node] = WeakVH(
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-          cast<Value>
+  NameSpaceCache[Node].reset(DNS);
+#else
+  NameSpaceCache[Node] = WeakVH(DNS);
 #endif
-          (DNS));
   return DNS;
 }
 
@@ -389,7 +383,7 @@ MigDIScope DebugInfo::findRegion(tree Node) {
     return getOrCreateFile(main_input_filename);
 #endif
 
-  std::map<tree_node *, WeakVH>::iterator I = RegionMap.find(Node);
+  std::map<tree_node *, MigTrackingMDRefType>::iterator I = RegionMap.find(Node);
   if (I != RegionMap.end())
     if (MDNode *R = cast<MDNode>(&*I->second))
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
@@ -621,19 +615,16 @@ MigDIType DebugInfo::createMethodType(tree type) {
     llvm::dwarf::DW_TAG_subroutine_type, StringRef(),
     findRegion(TYPE_CONTEXT(type)), getOrCreateFile(main_input_filename),
     0, 0, 0, 0);
-#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-  LLVMContext &Context = FwdType->getContext();
-  llvm::Value *FTN = cast<Value>(FwdType);
-  llvm::TrackingVH<Value>
-#else
   llvm::MDNode *FTN = FwdType;
-  llvm::TrackingVH<llvm::MDNode>
-#endif
-    FwdTypeNode = FTN;
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-  TypeCache[type] = WeakVH(cast<Value>(FwdType));
-  RegionStack.push_back(WeakVH(cast<Value>(FwdType)));
-  RegionMap[type] = WeakVH(cast<Value>(FwdType));
+  llvm::TempMDNode FwdTypeNode(FTN);
+#else
+  llvm::TrackingVH<llvm::MDNode> FwdTypeNode = FTN;
+#endif
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+  TypeCache[type].reset(FwdType);
+  RegionStack.push_back(FwdType);
+  RegionMap[type].reset(FwdType);
 #else
   TypeCache[type] = WeakVH(FwdType);
   // Push the struct on region stack.
@@ -676,7 +667,7 @@ MigDIType DebugInfo::createMethodType(tree type) {
 #endif
 
   RegionStack.pop_back();
-  std::map<tree_node *, WeakVH>::iterator RI = RegionMap.find(type);
+  std::map<tree_node *, MigTrackingMDRefType>::iterator RI = RegionMap.find(type);
   if (RI != RegionMap.end())
     RegionMap.erase(RI);
 
@@ -692,7 +683,7 @@ MigDIType DebugInfo::createMethodType(tree type) {
   // Now that we have a real decl for the struct, replace anything using the
   // old decl with the new one.  This will recursively update the debug info.
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-  FwdTypeNode->replaceAllUsesWith(MetadataAsValue::get(Context, RealType->getRawScope()));
+  FwdTypeNode->replaceAllUsesWith(RealType);
 #else
   llvm::DIType(FwdTypeNode).replaceAllUsesWith(RealType);
 #endif
@@ -718,11 +709,11 @@ MigDIType DebugInfo::createPointerType(tree type) {
           Tag, findRegion(DECL_CONTEXT(TyName)), GetNodeName(TyName),
           getOrCreateFile(TypeNameLoc.file), TypeNameLoc.line, 0 /*size*/,
           0 /*align*/, 0 /*offset */, 0 /*flags*/, FromTy);
-      TypeCache[TyName] = WeakVH(
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-              cast<Value>
+      TypeCache[TyName].reset(Ty);
+#else
+      TypeCache[TyName] = WeakVH(Ty);
 #endif
-              (Ty));
       return Ty;
     }
 
@@ -877,7 +868,7 @@ MigDIType DebugInfo::createStructType(tree type) {
   // Check if this type is created while creating context information
   // descriptor.
   {
-    std::map<tree_node *, WeakVH>::iterator I = TypeCache.find(type);
+    std::map<tree_node *, MigTrackingMDRefType>::iterator I = TypeCache.find(type);
     if (I != TypeCache.end())
       if (MDNode *TN = cast<MDNode>(&*I->second))
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
@@ -903,14 +894,13 @@ MigDIType DebugInfo::createStructType(tree type) {
     return FwdDecl;
 
   // Insert into the TypeCache so that recursive uses will find it.
-#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-  llvm::Value *FDN = cast<Value>(FwdDecl);
-  llvm::TrackingVH<Value> FwdDeclNode = FDN;
-  TypeCache[type] = WeakVH(cast<Value>(FwdDecl));
-  RegionStack.push_back(WeakVH(cast<Value>(FwdDecl)));
-  RegionMap[type] = WeakVH(cast<Value>(FwdDecl));
-#else
   llvm::MDNode *FDN = FwdDecl;
+#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+  llvm::TempMDNode FwdDeclNode(FDN);
+  TypeCache[type].reset(FwdDecl);
+  RegionStack.push_back(FwdDecl);
+  RegionMap[type].reset(FwdDecl);
+#else
   llvm::TrackingVH<llvm::MDNode> FwdDeclNode = FDN;
   TypeCache[type] = WeakVH(FwdDecl);
 
@@ -1023,7 +1013,7 @@ MigDIType DebugInfo::createStructType(tree type) {
     if (DECL_P(Member) && DECL_IGNORED_P(Member))
       continue;
 
-    std::map<tree_node *, WeakVH>::iterator I = SPCache.find(Member);
+    std::map<tree_node *, MigTrackingMDRefType>::iterator I = SPCache.find(Member);
     if (I != SPCache.end())
       EltTys.push_back(
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
@@ -1058,18 +1048,18 @@ MigDIType DebugInfo::createStructType(tree type) {
           ContainingType, Virtuality, VIndex, DECL_ARTIFICIAL(Member),
           optimize);
       EltTys.push_back(SP);
-      SPCache[Member] = WeakVH(
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-              cast<Value>
+      SPCache[Member].reset(SP);
+#else
+      SPCache[Member] = WeakVH(SP);
 #endif
-              (SP));
     }
   }
 
   MigDINodeArray Elements = Builder.getOrCreateArray(EltTys);
 
   RegionStack.pop_back();
-  std::map<tree_node *, WeakVH>::iterator RI = RegionMap.find(type);
+  std::map<tree_node *, MigTrackingMDRefType>::iterator RI = RegionMap.find(type);
   if (RI != RegionMap.end())
     RegionMap.erase(RI);
 
@@ -1089,17 +1079,16 @@ MigDIType DebugInfo::createStructType(tree type) {
 #endif
       Elements, RunTimeLang,
       ContainingType);
-  RegionMap[type] = WeakVH(
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-          cast<Value>
+  RegionMap[type].reset(RealDecl);
+#else
+  RegionMap[type] = WeakVH(RealDecl);
 #endif
-          (RealDecl));
 
   // Now that we have a real decl for the struct, replace anything using the
   // old decl with the new one.  This will recursively update the debug info
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-  LLVMContext &Context = RealDecl->getContext();
-  FwdDeclNode->replaceAllUsesWith(MetadataAsValue::get(Context, RealDecl->getRawScope()));
+  FwdDeclNode->replaceAllUsesWith(RealDecl);
 #else
   llvm::DIType(FwdDeclNode).replaceAllUsesWith(RealDecl);
 #endif
@@ -1111,7 +1100,7 @@ MigDIType DebugInfo::createStructType(tree type) {
 MigDIType DebugInfo::createVariantType(tree type, MigDIType MainTy) {
   MigDIType Ty;
   if (tree TyDef = TYPE_NAME(type)) {
-    std::map<tree_node *, WeakVH>::iterator I = TypeCache.find(TyDef);
+    std::map<tree_node *, MigTrackingMDRefType>::iterator I = TypeCache.find(TyDef);
     if (I != TypeCache.end())
       if (I->second)
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
@@ -1125,11 +1114,11 @@ MigDIType DebugInfo::createVariantType(tree type, MigDIType MainTy) {
           DW_TAG_typedef, findRegion(DECL_CONTEXT(TyDef)), GetNodeName(TyDef),
           getOrCreateFile(TypeDefLoc.file), TypeDefLoc.line, 0 /*size*/,
           0 /*align*/, 0 /*offset */, 0 /*flags*/, MainTy);
-      TypeCache[TyDef] = WeakVH(
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-              cast<Value>
+      TypeCache[TyDef].reset(Ty);
+#else
+      TypeCache[TyDef] = WeakVH(Ty);
 #endif
-              (Ty));
       return Ty;
     }
   }
@@ -1151,11 +1140,11 @@ MigDIType DebugInfo::createVariantType(tree type, MigDIType MainTy) {
         0 /* flags */, MainTy);
 
   if (TYPE_VOLATILE(type) || TYPE_READONLY(type)) {
-    TypeCache[type] = WeakVH(
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-            cast<Value>
+    TypeCache[type].reset(Ty);
+#else
+    TypeCache[type] = WeakVH(Ty);
 #endif
-            (Ty));
     return Ty;
   }
 
@@ -1179,7 +1168,7 @@ MigDIType DebugInfo::getOrCreateType(tree type) {
 #endif
 
   // Check to see if the compile unit already has created this type.
-  std::map<tree_node *, WeakVH>::iterator I = TypeCache.find(type);
+  std::map<tree_node *, MigTrackingMDRefType>::iterator I = TypeCache.find(type);
   if (I != TypeCache.end())
     if (I->second)
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
@@ -1253,11 +1242,11 @@ MigDIType DebugInfo::getOrCreateType(tree type) {
     Ty = createBasicType(type);
     break;
   }
-  TypeCache[type] = WeakVH(
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-          cast<Value>
+  TypeCache[type].reset(Ty);
+#else
+  TypeCache[type] = WeakVH(Ty);
 #endif
-          (Ty));
   return Ty;
 }
 
