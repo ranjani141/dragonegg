@@ -95,6 +95,7 @@ extern "C" {
 #include "tree-cfg.h"
 #include "gimple-iterator.h"
 #include "tree-eh.h"
+#include "regs.h"
 #if (GCC_MAJOR > 7)
 #include "memmodel.h"
 #endif
@@ -130,7 +131,7 @@ using namespace llvm;
 
 #if GCC_VERSION_CODE < GCC_VERSION(4, 6)
 extern enum machine_mode reg_raw_mode[FIRST_PSEUDO_REGISTER];
-#else
+#elif GCC_MAJOR < 5
 // TODO: Submit a GCC patch to install "regs.h" as a plugin header.
 struct target_regs {
   unsigned char x_hard_regno_nregs[FIRST_PSEUDO_REGISTER][MAX_MACHINE_MODE];

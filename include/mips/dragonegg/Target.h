@@ -24,4 +24,8 @@
 #ifndef DRAGONEGG_TARGET_H
 #define DRAGONEGG_TARGET_H
 
+#define LLVM_TARGET_INTRINSIC_PREFIX "mips"
+
+#define LLVM_TARGET_NAME Mips
+
 #endif /* DRAGONEGG_TARGET_H */

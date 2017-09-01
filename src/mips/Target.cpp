@@ -1,4 +1,4 @@
-//===--------------- Target.cpp - Implements the MIPS ABI. ---------------===//
+//===--------------- Target.cpp - Implements the Mips ABI. ---------------===//
 //
 // Copyright (C) 2017 Leslie Zhai <lesliezhai@llvm.org.cn>
 // Copyright (C) 2005 to 2013  Evan Cheng, Duncan Sands et al.
@@ -18,5 +18,5 @@
 // Foundation, 51 Franklin Street, Suite 500, Boston, MA 02110-1335, USA.
 //
 //===----------------------------------------------------------------------===//
-// This file implements specific LLVM MIPS ABI.
+// This file implements specific LLVM Mips ABI.
 //===----------------------------------------------------------------------===//

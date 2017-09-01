@@ -1,6 +1,6 @@
 #!/bin/bash 
 
-rm *.s a.out
+rm -f *.s a.out
 
 CC=$1
 if [[ -z "$CC" ]]; then
@@ -45,8 +45,8 @@ if [[ -z "$ASM" ]]; then
       -wrapper gdb,--args
   if [ $CC == "arm-linux-gnu-gcc" ]; then
     $CC $CFLAGS $CPATH -S $SRC -o hello-$CC.s
-    $CC -o hello-$CC hello-$CC.s $LIBPATH $LIB
-    qemu-arm -L /usr/arm-linux-gnu ./hello-$CC
+    $CC -o hello-$CC.out hello-$CC.s $LIBPATH $LIB
+    qemu-arm -L /usr/arm-linux-gnu ./hello-$CC.out
   fi
 else
   $CC -fplugin=./dragonegg.so \
