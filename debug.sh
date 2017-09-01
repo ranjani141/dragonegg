@@ -1,6 +1,6 @@
 #!/bin/bash 
 
-rm -f *.s a.out
+rm -f *.s *.out
 
 CC=$1
 if [[ -z "$CC" ]]; then
@@ -56,6 +56,7 @@ else
       -fplugin-arg-dragonegg-debug-pass-arguments \
       -fverbose-asm \
       -ftime-report \
+      -fplugin-arg-dragonegg-enable-gcc-optzns \
       $SRC \
       $LIBPATH \
       $LIB

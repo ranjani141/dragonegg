@@ -1062,10 +1062,8 @@ static void createPerModuleOptimizationPasses() {
       CodeGenPasses = new legacy::PassManager();
       CodeGenPasses->add(
         createTargetTransformInfoWrapperPass(TheTarget->getTargetIRAnalysis()));
-      Triple TargetTriple(TheModule->getTargetTriple());
-      std::unique_ptr<TargetLibraryInfoImpl> TLII(
-              new TargetLibraryInfoImpl(TargetTriple));
-      CodeGenPasses->add(new TargetLibraryInfoWrapperPass(*TLII));
+      TargetLibraryInfoImpl TLII(Triple(TheModule->getTargetTriple()));
+      CodeGenPasses->add(new TargetLibraryInfoWrapperPass(TLII));
 #else
       FunctionPassManager *PM = CodeGenPasses =
           new FunctionPassManager(TheModule);
