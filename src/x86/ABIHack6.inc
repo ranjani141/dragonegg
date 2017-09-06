@@ -2420,7 +2420,6 @@ struct GTY(()) stack_local_entry {
    [padding2]	       | = to_allocate
 					<- STACK_POINTER
   */
-#if (GCC_MAJOR < 8)
 struct ix86_frame
 {
   int nsseregs;
@@ -2441,7 +2440,6 @@ struct ix86_frame
      move instead of push instructions.  */
   bool save_regs_using_mov;
 };
-#endif
 
 #define MAX_CLASSES 8
 
@@ -3081,4 +3079,3 @@ examine_argument (machine_mode mode, const_tree type, int in_return,
 
   return false;
 }
-
