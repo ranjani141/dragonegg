@@ -462,7 +462,12 @@ void DebugInfo::EmitDeclare(tree decl, unsigned Tag, StringRef Name, tree type,
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
   llvm::DILocalVariable *D = Builder.createAutoVariable(
       VarScope, Name, getOrCreateFile(Loc.file), Loc.line, Ty, optimize);
+#if LLVM_VERSION_CODE > LLVM_VERSION(5, 0)
+  TinyPtrVector<DbgInfoIntrinsic *> DbgDeclares = FindDbgAddrUses(AI);
+  DbgInfoIntrinsic *DbgDecl = DbgDeclares.front();
+#else
   DbgDeclareInst *DbgDecl = FindAllocaDbgDeclare(AI);
+#endif
 #else
   llvm::DIVariable D = Builder.createLocalVariable(
       Tag, VarScope, Name, getOrCreateFile(Loc.file), Loc.line, Ty, optimize);
