@@ -1037,7 +1037,7 @@ MigDIType DebugInfo::createStructType(tree type) {
       unsigned VIndex = 0;
       MigDIType ContainingType;
       if (DECL_VINDEX(Member)) {
-#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+#if (GCC_MAJOR > 4)
         if (tree_fits_uhwi_p(DECL_VINDEX(Member)))
           VIndex = tree_to_shwi(DECL_VINDEX(Member));
 #else

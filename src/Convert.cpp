@@ -38,8 +38,8 @@
 #include "llvm/Support/CFG.h"
 #endif
 #include "llvm/Support/Debug.h"
-#include "llvm/Target/TargetLowering.h"
-#include "llvm/Target/TargetSubtargetInfo.h"
+#include "llvm/CodeGen/TargetLowering.h"
+#include "llvm/CodeGen/TargetSubtargetInfo.h"
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 9)
 #include "llvm/ADT/SmallSet.h"
 #endif
@@ -1865,7 +1865,7 @@ Function *TreeToLLVM::EmitFunction() {
   if (flag_reciprocal_math)
     FMF.setAllowReciprocal();
   if (flag_unsafe_math_optimizations && flag_finite_math_only)
-    FMF.setUnsafeAlgebra();
+    FMF.setFast();
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
   Builder.setFastMathFlags(FMF);
 #else
