@@ -9382,7 +9382,7 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
             // at this point.  Ignore it: clearly this *is* a memory.
 	      }
 	      else
-	        llvm_unreachable();
+	        llvm_unreachable("Error message to be added!!");
 	    }
         InputRvec[i] = Op;
 #endif

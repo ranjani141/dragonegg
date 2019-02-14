@@ -119,6 +119,7 @@ extern "C" {
 #if (GCC_MAJOR > 7)
 #include "attribs.h"
 #endif
+#include "print-tree.h"
 
 // TODO: In GCC, add targhooks.h to the list of plugin headers and remove this.
 tree default_mangle_decl_assembler_name(tree, tree);
@@ -381,16 +382,16 @@ static bool SizeOfGlobalMatchesDecl(GlobalValue *GV, tree decl) {
   // TODO: Change getTypeSizeInBits for aggregate types so it is no longer
   // rounded up to the alignment.
   uint64_t gcc_size = getInt64(DECL_SIZE(decl), true);
-  const DataLayout *DL =
+  const DataLayout DL =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
       TheModule->getDataLayout();
 #else
       TheTarget->getSubtargetImpl()->getDataLayout();
 #endif
-  unsigned Align = 8 * DL->getABITypeAlignment(Ty);
+  unsigned Align = 8 * DL.getABITypeAlignment(Ty);
   return
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-       TheModule->getDataLayout()->getTypeAllocSizeInBits(Ty)
+       TheModule->getDataLayout().getTypeAllocSizeInBits(Ty)
 #else
        TheTarget->getSubtargetImpl()->getDataLayout()->getTypeAllocSizeInBits(Ty)
 #endif
@@ -686,7 +687,7 @@ static void CreateTargetMachine(const std::string &TargetTriple) {
                                        CodeGenOptLevel());
 
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-  assert(TheModule->getDataLayout()->isBigEndian() == BYTES_BIG_ENDIAN);
+  assert(TheModule->getDataLayout().isBigEndian() == BYTES_BIG_ENDIAN);
 #else
   assert(TheTarget->getSubtargetImpl()->getDataLayout()->isBigEndian() == BYTES_BIG_ENDIAN);
 #endif

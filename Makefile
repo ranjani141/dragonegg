@@ -13,7 +13,7 @@ GCC?=gcc-6
 # your path).  It is not necessary to install LLVM to build dragonegg against
 # it.  Instead you can do an LLVM build and point LLVM_CONFIG to the copy of
 # llvm-config that was created during the build.
-LLVM_CONFIG?=llvm-config-6.0
+LLVM_CONFIG?=/home/user/Ranjani/llvm-debug/build/bin/llvm-config
 
 # Location of this Makefile, useful if you want separate source and object
 # directories.
@@ -44,6 +44,7 @@ COMMON_FLAGS+=-DENABLE_LLVM_PLUGINS
 #endif
 CFLAGS+=$(COMMON_FLAGS) $(shell $(LLVM_CONFIG) --cflags)
 LLVM_CXXFLAGS=$(shell $(LLVM_CONFIG) --cxxflags)
+LLVM_CXXFLAGS:=$(filter-out -Werror=unguarded-availability-new,$(LLVM_CXXFLAGS))
 LLVM_CXXFLAGS_Wcwd=$(subst -Wcovered-switch-default, -Wno-switch-default, $(LLVM_CXXFLAGS))
 LLVM_CXXFLAGS_Wsc=$(subst -Wstring-conversion, , $(LLVM_CXXFLAGS_Wcwd))
 CXXFLAGS+=$(COMMON_FLAGS) $(LLVM_CXXFLAGS_Wsc)
@@ -103,6 +104,7 @@ CPP_OPTIONS+=-DDRAGONEGG_DEBUG -g
 # endif
 
 LD_OPTIONS+=$(shell $(LLVM_CONFIG) --ldflags) $(LDFLAGS)
+LD_OPTIONS+=-lpthread -ltinfo
 
 LLVM_COMPONENTS=ipo scalaropts target
 ifdef ENABLE_LLVM_PLUGINS

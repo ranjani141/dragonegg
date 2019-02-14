@@ -1526,7 +1526,7 @@ MigDISubprogram DebugInfo::CreateSubprogramDefinition(
 Instruction *DebugInfo::InsertDeclare(Value *Storage, DIVariable D,
                                       Instruction *InsertBefore) {
   assert(Storage && "no storage passed to dbg.declare");
-  assert(D.Verify() && "empty DIVariable passed to dbg.declare");
+  //assert(D.Verify() && "empty DIVariable passed to dbg.declare");
   if (!DeclareFn)
     DeclareFn = Intrinsic::getDeclaration(&M, Intrinsic::dbg_declare);
 
@@ -1545,7 +1545,7 @@ Instruction *DebugInfo::InsertDeclare(Value *Storage, DIVariable D,
 Instruction *DebugInfo::InsertDeclare(Value *Storage, DIVariable D,
                                       BasicBlock *InsertAtEnd) {
   assert(Storage && "no storage passed to dbg.declare");
-  assert(D.Verify() && "invalid DIVariable passed to dbg.declare");
+  //assert(D.Verify() && "invalid DIVariable passed to dbg.declare");
   if (!DeclareFn)
     DeclareFn = Intrinsic::getDeclaration(&M, Intrinsic::dbg_declare);
 
@@ -1570,7 +1570,7 @@ Instruction *DebugInfo::InsertDeclare(Value *Storage, DIVariable D,
 Instruction *DebugInfo::InsertDbgValueIntrinsic(
     Value *V, uint64_t Offset, DIVariable D, Instruction *InsertBefore) {
   assert(V && "no value passed to dbg.value");
-  assert(D.Verify() && "invalid DIVariable passed to dbg.value");
+  //assert(D.Verify() && "invalid DIVariable passed to dbg.value");
   if (!ValueFn)
     ValueFn = Intrinsic::getDeclaration(&M, Intrinsic::dbg_value);
 
@@ -1594,7 +1594,7 @@ Instruction *DebugInfo::InsertDbgValueIntrinsic(
 Instruction *DebugInfo::InsertDbgValueIntrinsic(
     Value *V, uint64_t Offset, DIVariable D, BasicBlock *InsertAtEnd) {
   assert(V && "no value passed to dbg.value");
-  assert(D.Verify() && "invalid DIVariable passed to dbg.value");
+  //assert(D.Verify() && "invalid DIVariable passed to dbg.value");
   if (!ValueFn)
     ValueFn = Intrinsic::getDeclaration(&M, Intrinsic::dbg_value);
 

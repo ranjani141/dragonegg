@@ -55,6 +55,7 @@ extern "C" {
 #include "print-tree.h"
 #include "calls.h"
 #endif
+#include "stor-layout.h"
 #if (GCC_MAJOR > 7)
 #include "stringpool.h"
 #include "attribs.h"
