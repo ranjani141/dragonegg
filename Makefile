@@ -105,6 +105,7 @@ CPP_OPTIONS+=-DDRAGONEGG_DEBUG -g
 
 LD_OPTIONS+=$(shell $(LLVM_CONFIG) --ldflags) $(LDFLAGS)
 LD_OPTIONS+=-lpthread -ltinfo
+LD_OPTIONS+=-lLLVMObjCARCOpts
 
 LLVM_COMPONENTS=ipo scalaropts target
 ifdef ENABLE_LLVM_PLUGINS
