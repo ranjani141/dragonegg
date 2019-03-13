@@ -42,6 +42,7 @@ extern "C" {
 #include "config.h"
 // Stop GCC declaring 'getopt' as it can clash with the system's declaration.
 #undef HAVE_DECL_GETOPT
+#define IN_TARGET_CODE 1
 #include "system.h"
 #include "coretypes.h"
 #include "tm.h"

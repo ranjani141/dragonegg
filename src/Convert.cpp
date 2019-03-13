@@ -56,6 +56,7 @@ extern "C" {
 #include "config.h"
 // Stop GCC declaring 'getopt' as it can clash with the system's declaration.
 #undef HAVE_DECL_GETOPT
+#define IN_TARGET_CODE 1
 #include "system.h"
 #include "coretypes.h"
 #include "tm.h"
@@ -10092,17 +10093,17 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
       case RDIV_EXPR:
         RHS = EmitReg_RDIV_EXPR(rhs1, rhs2);
         break;
-      case REDUC_MAX_EXPR:
-        RHS = EmitReg_ReducMinMaxExpr(rhs1, ICmpInst::ICMP_UGE,
-                                      ICmpInst::ICMP_SGE, FCmpInst::FCMP_OGE);
-        break;
-      case REDUC_MIN_EXPR:
-        RHS = EmitReg_ReducMinMaxExpr(rhs1, ICmpInst::ICMP_ULE,
-                                      ICmpInst::ICMP_SLE, FCmpInst::FCMP_OLE);
-        break;
-      case REDUC_PLUS_EXPR:
-        RHS = EmitReg_REDUC_PLUS_EXPR(rhs1);
-        break;
+      // case REDUC_MAX_EXPR:
+      //   RHS = EmitReg_ReducMinMaxExpr(rhs1, ICmpInst::ICMP_UGE,
+      //                                 ICmpInst::ICMP_SGE, FCmpInst::FCMP_OGE);
+      //   break;
+      // case REDUC_MIN_EXPR:
+      //   RHS = EmitReg_ReducMinMaxExpr(rhs1, ICmpInst::ICMP_ULE,
+      //                                 ICmpInst::ICMP_SLE, FCmpInst::FCMP_OLE);
+      //   break;
+      // case REDUC_PLUS_EXPR:
+      //   RHS = EmitReg_REDUC_PLUS_EXPR(rhs1);
+      //   break;
       case ROUND_DIV_EXPR:
         RHS = EmitReg_ROUND_DIV_EXPR(rhs1, rhs2);
         break;

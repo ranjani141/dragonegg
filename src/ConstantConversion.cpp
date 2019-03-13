@@ -50,6 +50,7 @@ extern "C" {
 #include "config.h"
 // Stop GCC declaring 'getopt' as it can clash with the system's declaration.
 #undef HAVE_DECL_GETOPT
+#define IN_TARGET_CODE 1
 #include "system.h"
 #include "coretypes.h"
 #include "tm.h"
@@ -909,7 +910,7 @@ static Constant *ConvertArrayCONSTRUCTOR(tree exp, TargetFolder &Folder) {
   // given for it.
   uint64_t TypeElts =
       isa<ARRAY_TYPE>(init_type) ? ArrayLengthOf(init_type)
-                                 : TYPE_VECTOR_SUBPARTS(init_type);
+                                 : (uint64_t)TYPE_VECTOR_SUBPARTS(init_type);
   if (TypeElts != NO_LENGTH)
     Elts.resize(TypeElts);
 

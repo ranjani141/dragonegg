@@ -41,6 +41,7 @@ extern "C" {
 #include "config.h"
 // Stop GCC declaring 'getopt' as it can clash with the system's declaration.
 #undef HAVE_DECL_GETOPT
+#define IN_TARGET_CODE 1
 #include "system.h"
 #include "coretypes.h"
 #include "target.h"
@@ -80,8 +81,13 @@ extern void debug_gimple_stmt(union gimple_statement_d *);
 #if (GCC_MAJOR > 7)
 #include "memmodel.h"
 #include "tree-vrp.h"
-#include "ABIHack8.inc"
+// #if (GCC_MINOR >= 2 )
+#include "ABIHack8.2.inc"
+// #else
+// #include "ABIHack8.inc"
+// #endif
 #elif (GCC_MAJOR > 4)
+#include "tree-vrp.h"
 #include "ABIHack6.inc"
 #else
 #include "ABIHack.inc"

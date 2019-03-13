@@ -5,7 +5,7 @@
 # If you don't specify anything, then by default the plugin targets the compiler
 # used to build it.
 # GCC?=$(CC)
-GCC?=gcc-6
+GCC?=gcc-8
 
 # Specify the copy of LLVM you will build the plugin against by giving its
 # llvm-config here or on the command line.  To use an installed copy of LLVM,
@@ -13,7 +13,8 @@ GCC?=gcc-6
 # your path).  It is not necessary to install LLVM to build dragonegg against
 # it.  Instead you can do an LLVM build and point LLVM_CONFIG to the copy of
 # llvm-config that was created during the build.
-LLVM_CONFIG?=/home/user/Ranjani/llvm-debug/build/bin/llvm-config
+LLVM_CONFIG?=~/installed/llvm-6.0.0/bin/llvm-config
+# LLVM_CONFIG?=/home/user/Ranjani/llvm-debug/build/bin/llvm-config
 
 # Location of this Makefile, useful if you want separate source and object
 # directories.
