@@ -1354,7 +1354,9 @@ void TreeToLLVM::EmitVariablesInScope(tree scope) {
 /// Returns the provided value as a convenience.
 Value *TreeToLLVM::DefineSSAName(tree reg, Value *Val) {
   assert(isa<SSA_NAME>(reg) && "Not an SSA name!");
-  if (Value *ExistingValue = SSANames[reg]) {
+  if ( SSANames.end() != SSANames.find( reg ) ) {
+    Value *ExistingValue = SSANames[reg];
+  // if (Value *ExistingValue = SSANames[reg]) {
     if (Val != ExistingValue) {
       assert(isSSAPlaceholder(ExistingValue) && "Multiply defined SSA name!");
       // Replace the placeholder with the value everywhere.  This also updates
