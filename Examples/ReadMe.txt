@@ -1,3 +1,11 @@
+Install:
+
+* Install llvm-6.0 in debug mode at ~/installed/
+* gcc-8 should be in the machine (8.2 to be specific)
+* gnat-8
+
+
+
 gcc-8 -S -fplugin=./dragonegg.so ./Examples/test3.adb
 
 
