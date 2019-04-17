@@ -22,3 +22,5 @@ To run in debug mode, use the following command
 
 
 gdb -q --args /usr/lib/gcc/x86_64-linux-gnu/8/gnat1 -quiet -dumpbase test3.adb -auxbase test3 -fplugin=./dragonegg.so -mtune=generic -march=x86-64 Examples/test3.adb -o test3.s
+
+gdb -q --args /usr/lib/gcc/x86_64-linux-gnu/8/gnat1 -quiet -dumpbase test4.adb -auxbase test4 -fplugin=./dragonegg.so -mtune=generic -march=x86-64 Examples/test4.adb -o test4.s

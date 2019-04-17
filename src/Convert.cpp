@@ -9614,8 +9614,9 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
           uint64_t LHSSize =
               isInt64(DECL_SIZE(lhs), true) ? getInt64(DECL_SIZE(lhs), true) / 8
                                             : ~0UL;
+          llvm::PointerType * AllocaInt8PtrTy= Builder.getInt8PtrTy();
           Function *EndIntr =
-              Intrinsic::getDeclaration(TheModule, Intrinsic::lifetime_end);
+            Intrinsic::getDeclaration(TheModule, Intrinsic::lifetime_end, AllocaInt8PtrTy);
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
           Builder.CreateCall(EndIntr, {Builder.getInt64(LHSSize), LHSAddr});
 #else
