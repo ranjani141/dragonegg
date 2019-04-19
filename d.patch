@@ -1,0 +1,104 @@
+diff --git a/Makefile b/Makefile
+index 922b044..2008679 100644
+--- a/Makefile
++++ b/Makefile
+@@ -4,7 +4,8 @@
+ #   GCC=gcc-4.7 make ...
+ # If you don't specify anything, then by default the plugin targets the compiler
+ # used to build it.
+-GCC?=$(CC)
++# GCC?=$(CC)
++GCC?=gcc-6
+ 
+ # Specify the copy of LLVM you will build the plugin against by giving its
+ # llvm-config here or on the command line.  To use an installed copy of LLVM,
+@@ -12,7 +13,7 @@ GCC?=$(CC)
+ # your path).  It is not necessary to install LLVM to build dragonegg against
+ # it.  Instead you can do an LLVM build and point LLVM_CONFIG to the copy of
+ # llvm-config that was created during the build.
+-LLVM_CONFIG?=llvm-config
++LLVM_CONFIG?=llvm-config-6.0
+ 
+ # Location of this Makefile, useful if you want separate source and object
+ # directories.
+diff --git a/src/Backend.cpp b/src/Backend.cpp
+index 9e2bf04..b11fd3e 100644
+--- a/src/Backend.cpp
++++ b/src/Backend.cpp
+@@ -63,7 +63,7 @@
+ #include "llvm/Support/ManagedStatic.h"
+ #include "llvm/Support/SourceMgr.h"
+ #include "llvm/Support/TargetRegistry.h"
+-#include "llvm/Target/TargetSubtargetInfo.h"
++#include "llvm/CodeGen/TargetSubtargetInfo.h"
+ #include "llvm/Transforms/IPO.h"
+ #include "llvm/Transforms/IPO/PassManagerBuilder.h"
+ #include "llvm-c/Target.h"
+diff --git a/src/Convert.cpp b/src/Convert.cpp
+index 8b66ef5..744ec32 100644
+--- a/src/Convert.cpp
++++ b/src/Convert.cpp
+@@ -38,8 +38,8 @@
+ #include "llvm/Support/CFG.h"
+ #endif
+ #include "llvm/Support/Debug.h"
+-#include "llvm/Target/TargetLowering.h"
+-#include "llvm/Target/TargetSubtargetInfo.h"
++#include "llvm/CodeGen/TargetLowering.h"
++#include "llvm/CodeGen/TargetSubtargetInfo.h"
+ #if LLVM_VERSION_CODE > LLVM_VERSION(3, 9)
+ #include "llvm/ADT/SmallSet.h"
+ #endif
+@@ -1865,7 +1865,7 @@ Function *TreeToLLVM::EmitFunction() {
+   if (flag_reciprocal_math)
+     FMF.setAllowReciprocal();
+   if (flag_unsafe_math_optimizations && flag_finite_math_only)
+-    FMF.setUnsafeAlgebra();
++    FMF.setFast();
+ #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
+   Builder.setFastMathFlags(FMF);
+ #else
+diff --git a/src/Debug.cpp b/src/Debug.cpp
+index fb5cc60..310e69c 100644
+--- a/src/Debug.cpp
++++ b/src/Debug.cpp
+@@ -1037,7 +1037,7 @@ MigDIType DebugInfo::createStructType(tree type) {
+       unsigned VIndex = 0;
+       MigDIType ContainingType;
+       if (DECL_VINDEX(Member)) {
+-#if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
++#if (GCC_MAJOR > 4)
+         if (tree_fits_uhwi_p(DECL_VINDEX(Member)))
+           VIndex = tree_to_shwi(DECL_VINDEX(Member));
+ #else
+diff --git a/src/x86/ABIHack6.inc b/src/x86/ABIHack6.inc
+index c4eb660..c819dfc 100644
+--- a/src/x86/ABIHack6.inc
++++ b/src/x86/ABIHack6.inc
+@@ -2420,26 +2420,6 @@ struct GTY(()) stack_local_entry {
+    [padding2]	       | = to_allocate
+ 					<- STACK_POINTER
+   */
+-struct ix86_frame
+-{
+-  int nsseregs;
+-  int nregs;
+-  int va_arg_size;
+-  int red_zone_size;
+-  int outgoing_arguments_size;
+-
+-  /* The offsets relative to ARG_POINTER.  */
+-  HOST_WIDE_INT frame_pointer_offset;
+-  HOST_WIDE_INT hard_frame_pointer_offset;
+-  HOST_WIDE_INT stack_pointer_offset;
+-  HOST_WIDE_INT hfp_save_offset;
+-  HOST_WIDE_INT reg_save_offset;
+-  HOST_WIDE_INT sse_reg_save_offset;
+-
+-  /* When save_regs_using_mov is set, emit prologue using
+-     move instead of push instructions.  */
+-  bool save_regs_using_mov;
+-};
+ 
+ #define MAX_CLASSES 8
+ 

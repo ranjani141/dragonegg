@@ -13,7 +13,7 @@ GCC?=gcc-8
 # your path).  It is not necessary to install LLVM to build dragonegg against
 # it.  Instead you can do an LLVM build and point LLVM_CONFIG to the copy of
 # llvm-config that was created during the build.
-LLVM_CONFIG?=~/installed/llvm-6.0.0/build/bin/llvm-config
+LLVM_CONFIG?=~/installed/llvm-6.0.0/bin/llvm-config
 # LLVM_CONFIG?=/home/user/Ranjani/llvm-debug/build/bin/llvm-config
 
 # Location of this Makefile, useful if you want separate source and object
