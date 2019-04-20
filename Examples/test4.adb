@@ -5,12 +5,12 @@ package body test4 is
 
 procedure test41 is
 
-c : short_integer;
+--c : short_integer;
 A : F32Array1by3;
 
 begin
-   c := 67;
-   --A(1) := 5.7e3;
+   --c := 67;
+   A(1) := 5.7e3;
    
 end test41;
 	
