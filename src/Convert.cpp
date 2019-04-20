@@ -6802,7 +6802,8 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
             IndexVal, EmitRegisterWithCast(LowerBound, IndexType), "",
             hasNUW(TREE_TYPE(Index)), hasNSW(TREE_TYPE(Index)));
 
-      LValue ArrayAddrLV = EmitLV(Array);
+      //LValue ArrayAddrLV = EmitLV(Array);
+      LValue ArrayAddrLV = EmitLV(Index);
       assert(!ArrayAddrLV.isBitfield() && "Arrays cannot be bitfields!");
       ArrayAddr = ArrayAddrLV.Ptr;
       ArrayAlign = ArrayAddrLV.getAlignment();
