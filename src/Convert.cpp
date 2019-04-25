@@ -7590,7 +7590,9 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
       assert(is_gimple_reg_type(TREE_TYPE(reg)) && "Not of register type!");
 
       // If we already found the definition of the SSA name, return it.
-      if (Value *ExistingValue = SSANames[reg]) {
+      if ( SSANames.end() != SSANames.find( reg ) ) {
+      Value *ExistingValue = SSANames[reg];
+     // if (Value *ExistingValue = SSANames[reg]) {
         assert(ExistingValue->getType() == getRegType(TREE_TYPE(reg)) &&
                "SSA name has wrong type!");
         if (!isSSAPlaceholder(ExistingValue))
