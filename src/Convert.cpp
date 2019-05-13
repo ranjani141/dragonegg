@@ -2780,7 +2780,7 @@ AllocaInst *TreeToLLVM::getExceptionPtr(int RegionNo) {
   if (!ExceptionPtr) {
     LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-        ExceptionPtr->getAllocatedType()->getContext();
+        Fn->getType()->getContext();
 #else
         TheContext;
 #endif
@@ -2804,7 +2804,7 @@ AllocaInst *TreeToLLVM::getExceptionFilter(int RegionNo) {
   if (!ExceptionFilter) {
     LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-        ExceptionFilter->getAllocatedType()->getContext();
+        Fn->getType()->getContext();
 #else
         TheContext;
 #endif
@@ -10319,7 +10319,7 @@ bool TreeToLLVM::EmitBuiltinCall(GimpleTy *stmt, tree fndecl,
         Builder.CreateUnreachable();
         LLVMContext &Context =
 #if LLVM_VERSION_CODE > LLVM_VERSION(3, 8)
-            Result->getType()->getContext();
+            Callee->getType()->getContext();
 #else
             TheContext;
 #endif
