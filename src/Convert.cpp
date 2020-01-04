@@ -2843,6 +2843,11 @@ void TreeToLLVM::EmitLandingPads() {
   if (NormalInvokes.empty())
     return;
 
+    llvm::Constant *Personality = llvm::ConstantExpr::getBitCast(Fn, Builder.getInt8PtrTy());
+    if (!Fn->hasPersonalityFn()) {
+	Fn->setPersonalityFn(Personality);
+	}
+
   // If a GCC post landing pad is shared by several exception handling regions,
   // or if there is a normal edge to it, then create LLVM landing pads for each
   // eh region.  The landing pad instruction will then go in the LLVM landing
@@ -2924,11 +2929,11 @@ void TreeToLLVM::EmitLandingPads() {
   // handling region has its own landing pad, which is only reachable via the
   // unwind edges of the region's invokes.
   Type *UnwindDataTy =
-      StructType::get(Builder.getInt8PtrTy(), Builder.getInt32Ty()
+      StructType::get(Builder.getInt8PtrTy(), Builder.getInt32Ty());
 #if LLVM_VERSION_CODE < LLVM_VERSION(5, 0)
-              , NULL
+//              , NULL
 #endif
-              );
+  //            );
   for (unsigned LPadNo = 1; LPadNo < NormalInvokes.size(); ++LPadNo) {
     // Get the list of invokes for this GCC landing pad.
     SmallVector<InvokeInst *, 8> &InvokesForPad = NormalInvokes[LPadNo];
@@ -2954,17 +2959,17 @@ void TreeToLLVM::EmitLandingPads() {
 
     // Create the landingpad instruction without any clauses.  Clauses are added
     // below.
-    tree personality = DECL_FUNCTION_PERSONALITY(FnDecl);
-    if (!personality) {
-      assert(function_needs_eh_personality(cfun) == eh_personality_any &&
-             "No exception handling personality!");
-      personality = lang_hooks.eh_personality();
-    }
+    //tree personality = DECL_FUNCTION_PERSONALITY(FnDecl);
+    //if (!personality) {
+      //assert(function_needs_eh_personality(cfun) == eh_personality_any &&
+        //     "No exception handling personality!");
+      //personality = lang_hooks.eh_personality();
+    //}
     // https://reviews.llvm.org/D10429
     LandingPadInst *LPadInst = Builder.CreateLandingPad(
         UnwindDataTy,
 #if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
-        DECL_LLVM(personality),
+        //DECL_LLVM(personality),
 #endif
         0, "exc");
 
@@ -3062,6 +3067,12 @@ void TreeToLLVM::EmitFailureBlocks() {
 #else
         TheContext;
 #endif
+
+    llvm::Constant *Personality = llvm::ConstantExpr::getBitCast(Fn, Builder.getInt8PtrTy());
+    if (!Fn->hasPersonalityFn()) {
+	Fn->setPersonalityFn(Personality);
+	}
+
     eh_region region = get_eh_region_from_number(RegionNo);
     assert(region->type == ERT_MUST_NOT_THROW && "Unexpected region type!");
 
@@ -3100,18 +3111,18 @@ void TreeToLLVM::EmitFailureBlocks() {
       // Generate a landingpad instruction with an empty (i.e. catch-all) filter
       // clause.
       Type *UnwindDataTy =
-          StructType::get(Builder.getInt8PtrTy(), Builder.getInt32Ty()
+          StructType::get(Builder.getInt8PtrTy(), Builder.getInt32Ty());
 #if LLVM_VERSION_CODE < LLVM_VERSION(5, 0)
-                  , NULL
+                 // , NULL
 #endif
-                  );
-      tree personality = DECL_FUNCTION_PERSONALITY(FnDecl);
-      assert(personality && "No-throw region but no personality function!");
+                 // );
+      //tree personality = DECL_FUNCTION_PERSONALITY(FnDecl);
+      //assert(personality && "No-throw region but no personality function!");
       // https://reviews.llvm.org/D10429
       LandingPadInst *LPadInst = Builder.CreateLandingPad(
           UnwindDataTy,
 #if LLVM_VERSION_CODE < LLVM_VERSION(3, 9)
-          DECL_LLVM(personality),
+          //DECL_LLVM(personality),
 #endif
           1, "exc");
       ArrayType *FilterTy = ArrayType::get(Builder.getInt8PtrTy(), 0);
