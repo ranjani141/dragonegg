@@ -1682,6 +1682,7 @@ Type *llvm_x86_scalar_type_for_struct_return(tree type, unsigned *Offset) {
         else
           return Type::getInt8Ty(Context);
       }
+      return Type::getInt64Ty(Context);//ASHU: hack fix
       llvm_unreachable("Unexpected type!");
     }
     if (NumClasses == 2) {
@@ -1706,6 +1707,7 @@ Type *llvm_x86_scalar_type_for_struct_return(tree type, unsigned *Offset) {
           return Type::getFloatTy(Context);
         llvm_unreachable("Unexpected type!");
       }
+      return Type::getDoubleTy(Context);//ASHU: hack fix
       llvm_unreachable("Unexpected type!");
     }
     llvm_unreachable("Unexpected type!");

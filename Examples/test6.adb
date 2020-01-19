@@ -1,4 +1,4 @@
-with library;
+--  with library;
 
 package body test6 is
   
